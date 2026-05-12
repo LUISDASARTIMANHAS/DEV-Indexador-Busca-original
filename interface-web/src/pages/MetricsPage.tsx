@@ -51,7 +51,7 @@ const MetricsPage = () => {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div className="stat-card">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -118,6 +118,28 @@ const MetricsPage = () => {
             </div>
           </div>
         </div>
+        <div className="stat-card">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-destructive/10 flex items-center justify-center">
+              <Search className="h-5 w-5 text-destructive" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-foreground">{data.overview.queriesWithoutResults}</p>
+              <p className="text-xs text-muted-foreground">Consultas sem retorno (UC41)</p>
+            </div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-info/10 flex items-center justify-center">
+              <TrendingUp className="h-5 w-5 text-info" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-foreground">{data.overview.zeroResultsRate}</p>
+              <p className="text-xs text-muted-foreground">Taxa sem resultados</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Charts */}
@@ -143,6 +165,55 @@ const MetricsPage = () => {
         </div>
 
         <div className="glass-card p-5">
+          <h3 className="text-sm font-semibold text-foreground mb-4">Distribuição de consultas</h3>
+          <div className="flex items-center gap-6">
+            <ResponsiveContainer width="50%" height={260}>
+              <PieChart>
+                <Pie
+                  data={data.queryOutcomeDistribution}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={50}
+                  outerRadius={90}
+                  dataKey="value"
+                  paddingAngle={3}
+                >
+                  {data.queryOutcomeDistribution.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "hsl(0, 0%, 100%)",
+                    border: "1px solid hsl(200, 15%, 90%)",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="flex-1 space-y-3">
+              {data.queryOutcomeDistribution.map((item, i) => (
+                <div key={item.name} className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="h-3 w-3 rounded-full shrink-0"
+                        style={{ backgroundColor: COLORS[i % COLORS.length] }}
+                      />
+                      <span className="text-foreground">{item.name}</span>
+                    </div>
+                    <span className="text-muted-foreground font-mono">{item.value}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="glass-card p-5">
           <h3 className="text-sm font-semibold text-foreground mb-4">Documentos por categoria</h3>
           <div className="flex items-center gap-6">
             <ResponsiveContainer width="50%" height={260}>
@@ -166,7 +237,10 @@ const MetricsPage = () => {
               {data.documentsByCategory.map((cat, i) => (
                 <div key={cat.name} className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: CATEGORY_COLORS[i] }} />
+                    <span
+                      className="h-3 w-3 rounded-full shrink-0"
+                      style={{ backgroundColor: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }}
+                    />
                     <span className="text-foreground">{cat.name}</span>
                   </div>
                   <span className="text-muted-foreground font-mono">{cat.value}</span>
@@ -175,38 +249,40 @@ const MetricsPage = () => {
             </div>
           </div>
         </div>
-      </div>
-
-      <div className="glass-card p-5">
-        <h3 className="text-sm font-semibold text-foreground mb-4">Termos mais buscados</h3>
-        <div className="flex items-center gap-6">
-          <ResponsiveContainer width="40%" height={220}>
-            <PieChart>
-              <Pie data={data.topTerms} cx="50%" cy="50%" innerRadius={40} outerRadius={80} dataKey="value" paddingAngle={3}>
-                {data.topTerms.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "hsl(0, 0%, 100%)",
-                  border: "1px solid hsl(200, 15%, 90%)",
-                  borderRadius: "8px",
-                  fontSize: "12px",
-                }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="flex-1 space-y-2">
-            {data.topTerms.map((term, i) => (
-              <div key={term.name} className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: COLORS[i] }} />
-                  <span className="text-foreground">{term.name}</span>
+        <div className="glass-card p-5">
+          <h3 className="text-sm font-semibold text-foreground mb-4">Termos mais buscados</h3>
+          <div className="flex items-center gap-6">
+            <ResponsiveContainer width="40%" height={220}>
+              <PieChart>
+                <Pie data={data.topTerms} cx="50%" cy="50%" innerRadius={40} outerRadius={80} dataKey="value" paddingAngle={3}>
+                  {data.topTerms.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "hsl(0, 0%, 100%)",
+                    border: "1px solid hsl(200, 15%, 90%)",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="flex-1 space-y-2">
+              {data.topTerms.map((term, i) => (
+                <div key={term.name} className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="h-3 w-3 rounded-full shrink-0"
+                      style={{ backgroundColor: COLORS[i % COLORS.length] }}
+                    />
+                    <span className="text-foreground">{term.name}</span>
+                  </div>
+                  <span className="text-muted-foreground font-mono">{term.value}</span>
                 </div>
-                <span className="text-muted-foreground font-mono">{term.value}</span>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </div>

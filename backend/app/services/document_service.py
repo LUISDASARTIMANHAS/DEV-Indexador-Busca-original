@@ -18,6 +18,7 @@ from app.domain.document import Document
 from app.domain.document_category import DocumentCategory
 from app.domain.document_history import DocumentHistory
 from app.domain.document_metadata import DocumentMetadata
+from app.domain.index_history import IndexHistory
 from app.domain.ingestion_history import IngestionHistory
 from app.domain.ingestion_status import IngestionStatus
 from app.domain.invalid_document import InvalidDocument
@@ -171,6 +172,56 @@ class DocumentService:
         )
 
         return {"message": "Documento removido logicamente com sucesso."}
+
+    def purge_document(
+        self,
+        db: Session,
+        *,
+        document_id: int,
+        deleted_by: User,
+    ) -> dict:
+        document = self._get_document_or_raise(db, document_id, active_only=False)
+        document_title = document.titulo
+        histories = (
+            db.query(DocumentHistory)
+            .filter(DocumentHistory.cod_documento == document_id)
+            .order_by(DocumentHistory.numero_versao.asc())
+            .all()
+        )
+        history_ids = [history.cod_historico_documento for history in histories]
+        file_paths = self._collect_document_file_paths(histories)
+
+        self._delete_stored_files(file_paths)
+        index_service.remove_document_from_index(db, document_id=document_id)
+
+        if history_ids:
+            db.query(IndexHistory).filter(
+                IndexHistory.cod_historico_documento.in_(history_ids)
+            ).delete(synchronize_session=False)
+
+        db.query(IngestionHistory).filter(
+            IngestionHistory.cod_documento == document_id
+        ).delete(synchronize_session=False)
+        db.query(DocumentMetadata).filter(
+            DocumentMetadata.cod_documento == document_id
+        ).delete(synchronize_session=False)
+        db.query(DocumentHistory).filter(
+            DocumentHistory.cod_documento == document_id
+        ).delete(synchronize_session=False)
+        db.query(Document).filter(
+            Document.cod_documento == document_id
+        ).delete(synchronize_session=False)
+        db.commit()
+
+        administrative_history_service.log_action(
+            db,
+            actor=deleted_by,
+            description=f"Documento {document_title} removido fisicamente.",
+            action_type="Remoção Física",
+            entity_type="documento",
+            entity_id=document_id,
+        )
+        return {"message": "Documento removido fisicamente com sucesso."}
 
 
     def list_versions(self, db: Session, document_id: int) -> list[dict]:
@@ -785,6 +836,50 @@ class DocumentService:
     def _safe_export_filename(self, value: str) -> str:
         safe = "".join(char if char.isalnum() or char in ("-", "_") else "_" for char in value.strip())
         return safe.strip("_") or "documento"
+
+    def _collect_document_file_paths(
+        self,
+        histories: list[DocumentHistory],
+    ) -> list[Path]:
+        paths: list[Path] = []
+        for history in histories:
+            if not history.caminho_arquivo:
+                continue
+            path = Path(history.caminho_arquivo)
+            if path not in paths:
+                paths.append(path)
+        return paths
+
+    def _delete_stored_files(self, file_paths: list[Path]) -> None:
+        for path in file_paths:
+            try:
+                if path.exists() and path.is_file():
+                    path.unlink()
+                    self._cleanup_empty_storage_dirs(path.parent)
+            except OSError as exc:
+                raise DocumentValidationException(
+                    "Falha ao remover arquivo físico do documento."
+                ) from exc
+
+    def _cleanup_empty_storage_dirs(self, directory: Path) -> None:
+        current = directory
+        storage_root = self.storage_dir.resolve()
+        while current.exists():
+            try:
+                current_resolved = current.resolve()
+            except OSError:
+                break
+            if current_resolved == storage_root.parent or storage_root not in current_resolved.parents and current_resolved != storage_root:
+                break
+            if current_resolved == storage_root:
+                if any(current.iterdir()):
+                    break
+                current.rmdir()
+                break
+            if any(current.iterdir()):
+                break
+            current.rmdir()
+            current = current.parent
 
     def _build_default_title(self, filename: str) -> str:
         stem = Path(filename).stem.strip()

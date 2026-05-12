@@ -316,8 +316,10 @@ export const mockMetrics: MetricsSnapshot = {
     averageSearchTime: "0.34s",
     indexedDocuments: 1247,
     successRate: "96.2%",
-    averageResults: 8.3,
+    averageResults: "8.3",
     queriesToday: 289,
+    queriesWithoutResults: 214,
+    zeroResultsRate: "11.3%",
   },
   queriesByDay: [
     { day: "Seg", consultas: 42 },
@@ -340,6 +342,10 @@ export const mockMetrics: MetricsSnapshot = {
     { name: "Administrativo", value: 380 },
     { name: "Pesquisa", value: 210 },
     { name: "Extensão", value: 137 },
+  ],
+  queryOutcomeDistribution: [
+    { name: "Com resultados", value: 1679 },
+    { name: "Sem resultados", value: 214 },
   ],
 };
 

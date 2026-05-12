@@ -136,6 +136,19 @@ def delete_document(
     )
 
 
+@router.delete("/{document_id}/physical", response_model=DocumentOperationResponse)
+def purge_document(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
+):
+    return document_service.purge_document(
+        db,
+        document_id=document_id,
+        deleted_by=current_user,
+    )
+
+
 @router.post("/{document_id}/reindex", response_model=ReindexResponse)
 def reindex_document(
     document_id: int,

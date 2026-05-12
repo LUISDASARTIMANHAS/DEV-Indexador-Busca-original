@@ -19,6 +19,17 @@ class MetricsService:
         total_queries = db.query(func.count(SearchHistory.cod_historico_busca)).scalar() or 0
         average_search_time = db.query(func.avg(SearchHistory.tempo_resposta_ms)).scalar()
         average_results = db.query(func.avg(SearchHistory.quantidade_resultados)).scalar()
+        queries_without_results = (
+            db.query(func.count(SearchHistory.cod_historico_busca))
+            .filter(SearchHistory.quantidade_resultados <= 0)
+            .scalar()
+            or 0
+        )
+        zero_results_rate = (
+            (queries_without_results / total_queries) * 100
+            if total_queries
+            else 0
+        )
 
         today = date.today()
         queries_today = (
@@ -70,6 +81,16 @@ class MetricsService:
             {"name": row[0], "value": row[1]}
             for row in documents_by_category_rows
         ]
+        query_outcome_distribution = [
+            {
+                "name": "Com resultados",
+                "value": max(total_queries - queries_without_results, 0),
+            },
+            {
+                "name": "Sem resultados",
+                "value": queries_without_results,
+            },
+        ]
 
         return {
             "overview": {
@@ -79,10 +100,13 @@ class MetricsService:
                 "successRate": index_snapshot["successRate"],
                 "averageResults": f"{float(average_results or 0):.1f}",
                 "queriesToday": queries_today,
+                "queriesWithoutResults": queries_without_results,
+                "zeroResultsRate": f"{zero_results_rate:.1f}%",
             },
             "queriesByDay": queries_by_day,
             "topTerms": top_terms,
             "documentsByCategory": documents_by_category,
+            "queryOutcomeDistribution": query_outcome_distribution,
         }
 
     def _format_duration(self, duration_ms: float | None) -> str:

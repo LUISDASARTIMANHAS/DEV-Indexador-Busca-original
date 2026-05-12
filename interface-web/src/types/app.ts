@@ -230,8 +230,10 @@ export type MetricsOverview = {
   averageSearchTime: string;
   indexedDocuments: number;
   successRate: string;
-  averageResults: number;
+  averageResults: string;
   queriesToday: number;
+  queriesWithoutResults: number;
+  zeroResultsRate: string;
 };
 
 export type MetricsPoint = {
@@ -249,6 +251,7 @@ export type MetricsSnapshot = {
   queriesByDay: MetricsPoint[];
   topTerms: NamedValue[];
   documentsByCategory: NamedValue[];
+  queryOutcomeDistribution: NamedValue[];
 };
 
 export type HistoryEntry = {
