@@ -5,7 +5,10 @@ from app.core.database import get_db
 from app.core.dependencies import require_roles
 from app.domain.user import User
 from app.domain.user_role import UserRole
-from app.schemas.index_schema import IndexStatusResponse, ReindexResponse
+from app.schemas.index_schema import (
+    IndexStatusResponse,
+    ReindexResponse,
+)
 from app.services.index_service import index_service
 
 router = APIRouter(prefix="/index", tags=["Index"])

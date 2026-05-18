@@ -170,6 +170,9 @@ class IndexService:
                 db.rollback()
                 failure_count += 1
 
+        inverted_index_service.refresh_all_term_statistics(db)
+        db.commit()
+
         return {
             "processedDocuments": len(document_ids),
             "successCount": success_count,
@@ -178,6 +181,36 @@ class IndexService:
                 f"Reindexação concluída: {success_count} sucesso(s), "
                 f"{failure_count} falha(s)."
             ),
+        }
+
+    def optimize_index(self, db: Session, *, triggered_by: User) -> dict:
+        """Otimiza o índice atualizando todas as estatísticas globais (DF/IDF).
+
+        Args:
+            db: Sessão do banco de dados.
+            triggered_by: Usuário que disparou a ação.
+
+        Returns:
+            Dicionário com o resumo da otimização.
+        """
+        started_at = time.perf_counter()
+        term_count = inverted_index_service.refresh_all_term_statistics(db)
+        db.commit()
+
+        duration_ms = int((time.perf_counter() - started_at) * 1000)
+        administrative_history_service.log_action(
+            db,
+            actor=triggered_by,
+            description=f"Otimização do índice concluída: {term_count} termos atualizados.",
+            action_type="Otimização",
+            entity_type="indice",
+            entity_id=0,
+        )
+
+        return {
+            "termCount": term_count,
+            "durationMs": duration_ms,
+            "message": f"Otimização concluída com sucesso. {term_count} termos atualizados.",
         }
 
     def get_status_snapshot(self, db: Session) -> dict:
