@@ -22,6 +22,7 @@ class SearchResponse(BaseModel):
     page: int
     perPage: int
     totalPages: int
+    responseTimeMs: int
     items: list[SearchResultResponse]
 
 

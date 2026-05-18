@@ -8,7 +8,7 @@ from app.repositories.document_repository import DocumentRepository
 from app.repositories.search_repository import SearchRepository
 from app.domain.user import User
 from app.strategies.search_ranking_strategy import SearchRankingStrategy
-from app.utils.text_processing import preprocess_for_indexing
+from app.utils.text_processing import normalize_text, preprocess_for_indexing
 
 
 class SearchService:
@@ -34,11 +34,22 @@ class SearchService:
     ) -> dict:
         started_at = time.perf_counter()
         if not query or not query.strip():
-            return self._empty_response(query=query, page=page, per_page=limit)
+            return self._empty_response(
+                query=query,
+                page=page,
+                per_page=limit,
+                response_time_ms=0,
+            )
 
         terms = self._process_query(query)
         if not terms:
-            response = self._empty_response(query=query, page=page, per_page=limit)
+            response_time_ms = self._elapsed_response_time_ms(started_at)
+            response = self._empty_response(
+                query=query,
+                page=page,
+                per_page=limit,
+                response_time_ms=response_time_ms,
+            )
             self._register_search(
                 db,
                 user_id=user_id,
@@ -52,7 +63,7 @@ class SearchService:
                     sort_by,
                 ),
                 result_count=0,
-                started_at=started_at,
+                response_time_ms=response_time_ms,
             )
             return response
 
@@ -61,62 +72,61 @@ class SearchService:
         rows = self.repository.search_terms(
             db,
             terms=terms,
+        )
+
+        ranked_items = self.ranking_strategy.rank(
+            rows,
+            terms,
+            raw_query=query,
+        )
+        ranked_payloads = self._load_ranked_payloads(
+            db,
+            ranked_items,
             category=category,
             document_type=document_type,
             author=author,
             date_from=normalized_date_from,
             date_to=normalized_date_to,
         )
-
-        ranked_items = self.ranking_strategy.rank(rows, terms)
-        ranked_docs = [
-            (item["document_id"], item["score"], item["matched_terms"])
-            for item in ranked_items
-        ]
-        if sort_by == "data-desc":
-            ranked_docs = self._sort_by_date(db, ranked_docs, reverse=True)
-        elif sort_by == "data-asc":
-            ranked_docs = self._sort_by_date(db, ranked_docs, reverse=False)
-        elif sort_by == "titulo":
-            ranked_docs = self._sort_by_title(db, ranked_docs)
+        ranked_payloads = self._sort_ranked_payloads(ranked_payloads, sort_by=sort_by)
 
         start = max((page - 1) * limit, 0)
         end = start + limit
-        paginated = ranked_docs[start:end]
-        top_score = ranked_docs[0][1] if ranked_docs else 0
+        paginated = ranked_payloads[start:end]
+        top_score = ranked_payloads[0]["score"] if ranked_payloads else 0
         items = []
 
-        for doc_id, score, matched_terms in paginated:
-            payload = self.document_repository.get_document_payload(db, doc_id)
-            if payload:
-                snippet_source = self._searchable_result_text(payload)
-                items.append(
-                    {
-                        "id": payload["id"],
-                        "title": payload["title"],
-                        "snippet": self._build_snippet(snippet_source, list(matched_terms)),
-                        "category": payload["category"],
-                        "type": payload["type"],
-                        "documentType": payload["document_type"],
-                        "author": payload["author_name"],
-                        "fileName": payload["file_name"],
-                        "mimeType": payload["mime_type"] or "",
-                        "size": self._format_size(payload["size_bytes"]),
-                        "date": (
-                            payload["document_date"].isoformat()
-                            if payload["document_date"]
-                            else payload["uploaded_at"].isoformat()
-                        ),
-                        "relevance": self._normalize_relevance(score, top_score),
-                    }
-                )
+        for item in paginated:
+            payload = item["payload"]
+            snippet_source = self._searchable_result_text(payload)
+            items.append(
+                {
+                    "id": payload["id"],
+                    "title": payload["title"],
+                    "snippet": self._build_snippet(
+                        snippet_source,
+                        sorted(item["matched_terms"]),
+                    ),
+                    "category": payload["category"],
+                    "type": payload["type"],
+                    "documentType": payload["document_type"],
+                    "author": payload["author_name"],
+                    "fileName": payload["file_name"],
+                    "mimeType": payload["mime_type"] or "",
+                    "size": self._format_size(payload["size_bytes"]),
+                    "date": self._effective_document_date(payload).isoformat(),
+                    "relevance": self._normalize_relevance(item["score"], top_score),
+                }
+            )
 
+        response_time_ms = self._elapsed_response_time_ms(started_at)
         response = {
             "query": query,
-            "total": len(ranked_docs),
+            "total": len(ranked_payloads),
             "page": page,
             "perPage": limit,
-            "totalPages": max(math.ceil(len(ranked_docs) / limit), 1),
+            "totalPages": max(math.ceil(len(ranked_payloads) / limit), 1),
+            "responseTimeMs": response_time_ms,
             "items": items,
         }
         self._register_search(
@@ -131,13 +141,17 @@ class SearchService:
                 date_to,
                 sort_by,
             ),
-            result_count=len(ranked_docs),
-            started_at=started_at,
+            result_count=len(ranked_payloads),
+            response_time_ms=response_time_ms,
         )
         return response
 
     def _process_query(self, query: str) -> list[str]:
-        return preprocess_for_indexing(query)["tokens"]
+        preprocessed = preprocess_for_indexing(query)
+        if preprocessed["tokens"]:
+            return preprocessed["tokens"]
+        normalized_query = normalize_text(query)
+        return [token for token in normalized_query.split(" ") if token]
 
     def list_recent_searches(self, db: Session, *, user_id: int, limit: int = 10) -> list[dict]:
         rows = self.repository.list_recent_searches(db, user_id=user_id, limit=limit)
@@ -223,20 +237,113 @@ class SearchService:
             return f"{size_bytes / 1024:.1f} KB"
         return f"{size_bytes / (1024 * 1024):.1f} MB"
 
-    def _sort_by_date(self, db: Session, ranked_docs: list[tuple[int, float, set[str]]], *, reverse: bool) -> list[tuple[int, float, set[str]]]:
-        def key_fn(item: tuple[int, float, set[str]]):
-            payload = self.document_repository.get_document_payload(db, item[0])
-            date_value = payload["document_date"] or payload["uploaded_at"]
-            return date_value
+    def _load_ranked_payloads(
+        self,
+        db: Session,
+        ranked_items: list[dict],
+        *,
+        category: str | None,
+        document_type: str | None,
+        author: str | None,
+        date_from: datetime | None,
+        date_to: datetime | None,
+    ) -> list[dict]:
+        ranked_payloads: list[dict] = []
+        for item in ranked_items:
+            payload = self.document_repository.get_document_payload(db, item["document_id"])
+            if payload is None:
+                continue
+            if not self._matches_filters(
+                payload,
+                category=category,
+                document_type=document_type,
+                author=author,
+                date_from=date_from,
+                date_to=date_to,
+            ):
+                continue
+            ranked_payloads.append(
+                {
+                    "document_id": item["document_id"],
+                    "score": item["score"],
+                    "matched_terms": item["matched_terms"],
+                    "payload": payload,
+                }
+            )
+        return ranked_payloads
 
-        return sorted(ranked_docs, key=key_fn, reverse=reverse)
+    def _matches_filters(
+        self,
+        payload: dict,
+        *,
+        category: str | None,
+        document_type: str | None,
+        author: str | None,
+        date_from: datetime | None,
+        date_to: datetime | None,
+    ) -> bool:
+        if category and self._normalize_filter_value(payload.get("category")) != self._normalize_filter_value(category):
+            return False
 
-    def _sort_by_title(self, db: Session, ranked_docs: list[tuple[int, float, set[str]]]) -> list[tuple[int, float, set[str]]]:
-        def key_fn(item: tuple[int, float, set[str]]):
-            payload = self.document_repository.get_document_payload(db, item[0])
-            return payload["title"].lower()
+        if document_type and not self._matches_document_type_filter(payload, document_type):
+            return False
 
-        return sorted(ranked_docs, key=key_fn)
+        if author:
+            author_value = self._normalize_filter_value(payload.get("author_name"))
+            if self._normalize_filter_value(author) not in author_value:
+                return False
+
+        effective_date = self._effective_document_date(payload).replace(tzinfo=None)
+        if date_from and effective_date < date_from.replace(tzinfo=None):
+            return False
+        if date_to and effective_date > date_to.replace(tzinfo=None):
+            return False
+        return True
+
+    def _matches_document_type_filter(self, payload: dict, document_type: str) -> bool:
+        normalized_filter = self._normalize_filter_value(document_type)
+        document_type_value = self._normalize_filter_value(payload.get("document_type"))
+        format_value = self._normalize_filter_value(payload.get("type"))
+        file_name_value = self._normalize_filter_value(payload.get("file_name"))
+        return any(
+            normalized_filter
+            and normalized_filter in value
+            for value in (document_type_value, format_value, file_name_value)
+        )
+
+    def _sort_ranked_payloads(self, ranked_payloads: list[dict], *, sort_by: str | None) -> list[dict]:
+        if sort_by == "data-desc":
+            return sorted(
+                ranked_payloads,
+                key=lambda item: (
+                    self._effective_document_date(item["payload"]),
+                    item["score"],
+                ),
+                reverse=True,
+            )
+        if sort_by == "data-asc":
+            return sorted(
+                ranked_payloads,
+                key=lambda item: (
+                    self._effective_document_date(item["payload"]),
+                    -item["score"],
+                ),
+            )
+        if sort_by == "titulo":
+            return sorted(
+                ranked_payloads,
+                key=lambda item: (
+                    self._normalize_filter_value(item["payload"]["title"]),
+                    -item["score"],
+                ),
+            )
+        return ranked_payloads
+
+    def _effective_document_date(self, payload: dict) -> datetime:
+        return payload["document_date"] or payload["uploaded_at"]
+
+    def _normalize_filter_value(self, value: str | None) -> str:
+        return normalize_text(value or "")
 
     def _register_search(
         self,
@@ -246,7 +353,7 @@ class SearchService:
         query: str,
         filters: str | None,
         result_count: int,
-        started_at: float,
+        response_time_ms: int,
     ) -> None:
         self.repository.create_search_history(
             db,
@@ -254,8 +361,11 @@ class SearchService:
             query=query,
             filters=filters,
             result_count=result_count,
-            response_time_ms=int((time.perf_counter() - started_at) * 1000),
+            response_time_ms=response_time_ms,
         )
+
+    def _elapsed_response_time_ms(self, started_at: float) -> int:
+        return max(int((time.perf_counter() - started_at) * 1000), 0)
 
     def _serialize_filters(
         self,
@@ -319,13 +429,21 @@ class SearchService:
             return value
         return value.isoformat()
 
-    def _empty_response(self, *, query: str, page: int, per_page: int) -> dict:
+    def _empty_response(
+        self,
+        *,
+        query: str,
+        page: int,
+        per_page: int,
+        response_time_ms: int,
+    ) -> dict:
         return {
             "query": query,
             "total": 0,
             "page": page,
             "perPage": per_page,
             "totalPages": 1,
+            "responseTimeMs": response_time_ms,
             "items": [],
         }
 

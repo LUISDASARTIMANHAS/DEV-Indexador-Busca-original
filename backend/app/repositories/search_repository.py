@@ -1,9 +1,11 @@
 from datetime import datetime
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.domain.document_category import DocumentCategory
 from app.domain.document_field import DocumentField
+from app.domain.field_type import FieldType
 from app.domain.inverted_index import InvertedIndex
 from app.domain.document import Document
 from app.domain.document_history import DocumentHistory
@@ -18,12 +20,15 @@ class SearchRepository:
         db: Session,
         *,
         terms: list[str],
-        category: str | None = None,
-        document_type: str | None = None,
-        author: str | None = None,
-        date_from: datetime | None = None,
-        date_to: datetime | None = None,
     ):
+        normalized_terms = sorted({term.strip() for term in terms if term and term.strip()})
+        if not normalized_terms:
+            return []
+
+        term_conditions = [
+            Term.texto_termo.like(f"{term}%")
+            for term in normalized_terms
+        ]
         query = (
             db.query(
                 Document.cod_documento.label("document_id"),
@@ -32,6 +37,7 @@ class SearchRepository:
                 DocumentMetadata.tipo_documento.label("metadata_document_type"),
                 Document.data_publicacao.label("document_date"),
                 DocumentCategory.nome_categoria.label("category"),
+                FieldType.tipo_campo.label("field_type"),
                 Term.texto_termo.label("term"),
                 Term.idf.label("idf"),
                 InvertedIndex.tf.label("tf"),
@@ -44,32 +50,20 @@ class SearchRepository:
                 DocumentField.cod_campo_documento == InvertedIndex.cod_campo_documento,
             )
             .join(
+                FieldType,
+                FieldType.cod_tipo_campo == DocumentField.cod_tipo_campo,
+            )
+            .join(
                 DocumentHistory,
                 DocumentHistory.cod_historico_documento == DocumentField.cod_historico_documento,
             )
             .join(Document, Document.cod_documento == DocumentHistory.cod_documento)
             .join(DocumentCategory, DocumentCategory.cod_categoria == Document.cod_categoria)
             .outerjoin(DocumentMetadata, DocumentMetadata.cod_documento == Document.cod_documento)
-            .filter(Term.texto_termo.in_(terms))
+            .filter(or_(*term_conditions))
             .filter(Document.ativo.is_(True))
             .filter(DocumentHistory.versao_ativa.is_(True))
         )
-
-        if category:
-            query = query.filter(DocumentCategory.nome_categoria.ilike(category.strip()))
-        if document_type:
-            normalized_document_type = f"%{document_type.strip()}%"
-            query = query.filter(
-                (Document.tipo.ilike(normalized_document_type))
-                | (DocumentMetadata.tipo_documento.ilike(normalized_document_type))
-            )
-        if author:
-            query = query.filter(DocumentMetadata.autor.ilike(f"%{author.strip()}%"))
-        if date_from:
-            query = query.filter(Document.data_publicacao >= date_from)
-        if date_to:
-            query = query.filter(Document.data_publicacao <= date_to)
-
         return query.all()
 
     def create_search_history(

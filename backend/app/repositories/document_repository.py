@@ -13,8 +13,8 @@ from app.domain.user import User
 
 class DocumentRepository:
     @staticmethod
-    def _active_history_query(db: Session):
-        return (
+    def _active_history_query(db: Session, *, active_only: bool = True):
+        query = (
             db.query(
                 Document.cod_documento.label("id"),
                 Document.titulo.label("title"),
@@ -45,11 +45,20 @@ class DocumentRepository:
             .outerjoin(IngestionHistory, IngestionHistory.cod_documento == Document.cod_documento)
             .outerjoin(IngestionStatus, IngestionStatus.cod_status_ingestao == IngestionHistory.cod_status_ingestao)
         )
+        if active_only:
+            query = query.filter(Document.ativo.is_(True))
+        return query
 
     @classmethod
-    def get_document_payload(cls, db: Session, document_id: int) -> dict | None:
+    def get_document_payload(
+        cls,
+        db: Session,
+        document_id: int,
+        *,
+        active_only: bool = True,
+    ) -> dict | None:
         row = (
-            cls._active_history_query(db)
+            cls._active_history_query(db, active_only=active_only)
             .filter(Document.cod_documento == document_id)
             .order_by(IngestionHistory.criado_em.desc(), DocumentHistory.numero_versao.desc())
             .first()
@@ -59,7 +68,7 @@ class DocumentRepository:
     @classmethod
     def list_ingestion_history(cls, db: Session, limit: int = 20) -> list[dict]:
         rows = (
-            cls._active_history_query(db)
+            cls._active_history_query(db, active_only=False)
             .order_by(IngestionHistory.criado_em.desc(), Document.cod_documento.desc())
             .limit(limit)
             .all()
@@ -69,7 +78,7 @@ class DocumentRepository:
     @classmethod
     def list_batch_files(cls, db: Session, limit: int = 10) -> list[dict]:
         rows = (
-            cls._active_history_query(db)
+            cls._active_history_query(db, active_only=False)
             .order_by(IngestionHistory.criado_em.desc(), Document.cod_documento.desc())
             .limit(limit)
             .all()

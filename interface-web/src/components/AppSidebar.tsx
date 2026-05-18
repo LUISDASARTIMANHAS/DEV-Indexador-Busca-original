@@ -27,8 +27,8 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const { logout, isAdmin } = useAuth();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate("/login");
   };
 

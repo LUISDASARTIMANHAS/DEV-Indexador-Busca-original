@@ -56,6 +56,19 @@ const buildResultsCsv = (items: SearchResult[]) => {
   return [header, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
 };
 
+const getPageNumbers = (current: number, total: number) => {
+  const window = 2;
+  const pages: (number | string)[] = [];
+  for (let i = 1; i <= total; i++) {
+    if (i === 1 || i === total || (i >= current - window && i <= current + window)) {
+      pages.push(i);
+    } else if (i === current - window - 1 || i === current + window + 1) {
+      pages.push("...");
+    }
+  }
+  return pages.filter((v, i, a) => a.indexOf(v) === i);
+};
+
 const ResultsPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -138,9 +151,9 @@ const ResultsPage = () => {
             <h1 className="text-xl font-semibold text-foreground">Resultados da busca</h1>
             <p className="text-sm text-muted-foreground">
               {hasResults ? (
-                <>{data.total} documentos encontrados para "<span className="font-medium text-foreground">{query}</span>"</>
+                <>{data.total} documentos encontrados para "<span className="font-medium text-foreground">{query}</span>" ({data.responseTimeMs}ms)</>
               ) : (
-                <>Nenhum resultado para "<span className="font-medium text-foreground">{query}</span>"</>
+                <>Nenhum resultado para "<span className="font-medium text-foreground">{query}</span>" ({data.responseTimeMs}ms)</>
               )}
             </p>
             {(filters.category || filters.documentType || filters.author || filters.dateFrom || filters.dateTo || filters.sortBy) && (
@@ -244,17 +257,23 @@ const ResultsPage = () => {
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
-              <Button
-                key={page}
-                variant={page === currentPage ? "default" : "outline"}
-                size="sm"
-                className="w-9"
-                onClick={() => goToPage(page)}
-              >
-                {page}
-              </Button>
-            ))}
+            {getPageNumbers(currentPage, totalPages).map((page, index) =>
+              page === "..." ? (
+                <span key={`dots-${index}`} className="px-2 text-muted-foreground">
+                  ...
+                </span>
+              ) : (
+                <Button
+                  key={page}
+                  variant={page === currentPage ? "default" : "outline"}
+                  size="sm"
+                  className="w-9"
+                  onClick={() => goToPage(page as number)}
+                >
+                  {page}
+                </Button>
+              ),
+            )}
             <Button
               variant="outline"
               size="sm"

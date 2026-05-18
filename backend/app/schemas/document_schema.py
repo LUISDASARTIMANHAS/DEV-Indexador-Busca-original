@@ -26,6 +26,7 @@ class DocumentUploadResponse(BaseModel):
 class DocumentDetailsResponse(BaseModel):
     id: int
     title: str
+    displayTitle: str | None = None
     fileName: str
     category: str
     type: str
@@ -43,6 +44,7 @@ class DocumentDetailsResponse(BaseModel):
     hash: str
     downloadUrl: str | None = None
     content: str
+    formattedContent: str | None = None
     extractedCharacters: int
 
 
@@ -62,6 +64,16 @@ class DocumentMetadataResponse(BaseModel):
     publicationDate: str | None = None
     uploadedAt: datetime
     version: int
+
+
+class DocumentVersionResponse(BaseModel):
+    version: int
+    createdAt: datetime
+    active: bool
+
+
+class DocumentOperationResponse(BaseModel):
+    message: str
 
 
 class IngestionBatchFileResponse(BaseModel):

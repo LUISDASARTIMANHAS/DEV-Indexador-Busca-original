@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from datetime import datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -7,10 +8,12 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import app.main as main_module
+from app.core.config import settings
 from app.core.database import Base, get_db
-from app.core.security import hash_password
+from app.core.security import decode_token, hash_password
 from app.domain.user import User
 from app.domain.user_role import UserRole
+from app.domain.user_session import UserSession
 from app.main import app
 
 
@@ -81,6 +84,7 @@ def test_login_success_returns_session_and_token(client: TestClient):
     assert payload["token"]
     assert payload["access_token"] == payload["token"]
     assert payload["token_type"] == "bearer"
+    assert payload["expiresAt"]
 
 
 
@@ -108,6 +112,58 @@ def test_me_returns_authenticated_user_profile(client: TestClient):
     assert payload["email"] == "admin@ifes.edu.br"
     assert payload["perfil"] == UserRole.ADMIN.value
     assert payload["role"] == "Administrador"
+
+
+def test_logout_revokes_current_session(client: TestClient):
+    session = login(client, "admin@ifes.edu.br", "admin123")
+
+    logout_response = client.post(
+        "/api/v1/auth/logout",
+        headers={"Authorization": f"Bearer {session['token']}"},
+    )
+
+    assert logout_response.status_code == 200
+    assert logout_response.json()["message"] == "Sessão encerrada com sucesso."
+
+    me_response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {session['token']}"},
+    )
+    assert me_response.status_code == 401
+    assert me_response.json()["message"] == "Sessão encerrada."
+
+
+def test_session_expires_after_inactivity(client: TestClient):
+    session = login(client, "admin@ifes.edu.br", "admin123")
+    payload = decode_token(session["token"])
+    assert payload is not None
+
+    session_local = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=main_module.engine,
+    )
+    db: Session = session_local()
+    try:
+        current_session = (
+            db.query(UserSession)
+            .filter(UserSession.identificador_sessao == payload["sid"])
+            .first()
+        )
+        assert current_session is not None
+        current_session.ultimo_acesso_em = datetime.utcnow() - timedelta(
+            minutes=settings.SESSION_IDLE_EXPIRE_MINUTES + 1
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    me_response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {session['token']}"},
+    )
+    assert me_response.status_code == 401
+    assert me_response.json()["message"] == "Sessão expirada por inatividade."
 
 
 

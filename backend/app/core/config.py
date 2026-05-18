@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "super-secret-key"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    SESSION_IDLE_EXPIRE_MINUTES: int = 30
 
     DOCUMENT_UPLOAD_DIR: str = "backend/storage/documents"
     DOCUMENT_MAX_FILE_SIZE_MB: int = 50

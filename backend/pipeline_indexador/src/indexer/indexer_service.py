@@ -14,11 +14,7 @@ class IndexerService:
 
         self.repository = IndexRepository()
 
-        self.pipeline = IndexPipeline()
-
-        self.pipeline.add_stage(PreprocessStage())
-        self.pipeline.add_stage(TokenizeStage())
-        self.pipeline.add_stage(IndexBuildStage(self.repository))
+        self.pipeline = IndexPipeline(self.repository)
 
     def index_document(self, document_id: str, text: str):
         """

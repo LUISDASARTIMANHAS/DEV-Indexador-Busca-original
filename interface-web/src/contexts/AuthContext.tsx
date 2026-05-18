@@ -6,6 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { authSessionExpiredEvent } from "@/lib/api/client";
 import { authService } from "@/lib/api/services";
 import { storageKeys } from "@/lib/storage";
 import type { SessionUser } from "@/types/app";
@@ -16,7 +17,7 @@ type AuthContextValue = {
   isAdmin: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -73,13 +74,60 @@ const readSession = (): SessionUser | null => {
   }
 };
 
+const clearSession = () => {
+  localStorage.removeItem(storageKeys.session);
+};
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setUser(readSession());
-    setIsLoading(false);
+    let isMounted = true;
+
+    const handleSessionExpired = () => {
+      clearSession();
+      if (isMounted) {
+        setUser(null);
+        setIsLoading(false);
+      }
+    };
+
+    const restoreSession = async () => {
+      const storedSession = readSession();
+      if (!storedSession) {
+        if (isMounted) {
+          setUser(null);
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      try {
+        const validatedSession = await authService.me(storedSession.token);
+        localStorage.setItem(storageKeys.session, JSON.stringify(validatedSession));
+        if (isMounted) {
+          setUser(validatedSession);
+        }
+      } catch {
+        clearSession();
+        if (isMounted) {
+          setUser(null);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    window.addEventListener(authSessionExpiredEvent, handleSessionExpired);
+    void restoreSession();
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener(authSessionExpiredEvent, handleSessionExpired);
+    };
   }, []);
 
   const value = useMemo<AuthContextValue>(() => ({
@@ -92,9 +140,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       localStorage.setItem(storageKeys.session, JSON.stringify(session));
       setUser(session);
     },
-    logout() {
-      localStorage.removeItem(storageKeys.session);
-      setUser(null);
+    async logout() {
+      const session = user ?? readSession();
+      try {
+        await authService.logout(session?.token);
+      } finally {
+        clearSession();
+        setUser(null);
+      }
     },
   }), [isLoading, user]);
 

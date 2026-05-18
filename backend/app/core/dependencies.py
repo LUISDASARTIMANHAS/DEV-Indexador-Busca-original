@@ -9,13 +9,22 @@ from app.core.database import get_db
 from app.core.security import decode_token
 from app.domain.user import User
 from app.domain.user_role import UserRole
+from app.domain.user_session import UserSession
+from app.services.auth_service import AuthService
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+
+def get_current_session(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: Session = Depends(get_db),
-):
+) -> UserSession:
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Credenciais não informadas",
+        )
+
     payload = decode_token(credentials.credentials)
 
     if payload is None:
@@ -25,7 +34,8 @@ def get_current_user(
         )
 
     subject = payload.get("sub")
-    if subject is None:
+    session_id = payload.get("sid")
+    if subject is None or not session_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token inválido",
@@ -39,7 +49,17 @@ def get_current_user(
             detail="Token inválido",
         )
 
-    user = db.query(User).filter(User.cod_usuario == user_id).first()
+    return AuthService.validate_session(
+        db,
+        session_id=str(session_id),
+        user_id=user_id,
+    )
+
+def get_current_user(
+    current_session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(User.cod_usuario == current_session.cod_usuario).first()
 
     if not user:
         raise HTTPException(

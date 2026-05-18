@@ -3,11 +3,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_session, get_current_user
 from app.domain.user import User
+from app.domain.user_session import UserSession
 from app.schemas.auth_schema import (
     AuthenticatedUserResponse,
     LoginRequest,
+    LogoutResponse,
     TokenResponse,
 )
 from app.services.auth_service import AuthService
@@ -32,3 +34,14 @@ def me(user: User = Depends(get_current_user)):
         "active": user.ativo,
         "perfil": user.perfil,
     }
+
+
+@router.post("/logout", response_model=LogoutResponse)
+def logout(
+    current_session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+):
+    return AuthService.logout(
+        db,
+        session_id=current_session.identificador_sessao,
+    )

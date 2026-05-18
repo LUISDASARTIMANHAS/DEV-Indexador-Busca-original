@@ -144,6 +144,34 @@ export const authService = {
     });
     return mapSessionUser(session);
   },
+
+  async me(token: string): Promise<SessionUser> {
+    if (shouldUseMocks()) {
+      await delay(150);
+      return mockSessionUser;
+    }
+
+    const session = await apiRequest<BackendSessionUser>("/api/v1/auth/me", {
+      token,
+    });
+    return mapSessionUser({
+      ...session,
+      token,
+      access_token: token,
+    });
+  },
+
+  async logout(token?: string): Promise<void> {
+    if (shouldUseMocks()) {
+      await delay(100);
+      return;
+    }
+
+    await apiRequest<{ message: string }>("/api/v1/auth/logout", {
+      method: "POST",
+      token,
+    });
+  },
 };
 
 export const searchService = {

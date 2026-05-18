@@ -16,6 +16,21 @@ Ao subir o compose em `docker/`, o ambiente passa a ter:
 - `sonarqube_db`: banco exclusivo do SonarQube.
 - `sonarqube`: interface e servidor de analise na porta `9000`.
 
+Portas publicadas no host por padrao:
+
+- banco principal: `localhost:55433`
+- banco do SonarQube: `localhost:55434`
+- SonarQube: `localhost:9000`
+
+Se alguma porta ja estiver ocupada, ajuste no arquivo `.env` da raiz:
+
+```env
+IFESDOC_POSTGRES_PORT=55433
+IFESDOC_SONAR_POSTGRES_PORT=55434
+```
+
+Isso altera apenas a porta exposta na sua maquina. Entre containers, o acesso continua sendo feito pelos hosts `postgres` e `sonarqube_db` na porta interna `5432`.
+
 ## Como subir
 
 ```bash

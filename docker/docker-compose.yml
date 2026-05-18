@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: ifesdoc_user
       POSTGRES_PASSWORD: ifesdoc_pass
     ports:
-      - "5433:5432"
+      - "${IFESDOC_POSTGRES_PORT:-55433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d
@@ -87,7 +87,7 @@ services:
       POSTGRES_PASSWORD: sonarqube
 
     ports:
-      - "5434:5432"
+      - "${IFESDOC_SONAR_POSTGRES_PORT:-55434}:5432"
 
     volumes:
       - sonarqube_postgres_data:/var/lib/postgresql/data

@@ -9,6 +9,5 @@ echo ==========================
 echo.
 
 docker build -f Dockerfile.windows -t frontend .
-docker run -d -p 8080:8080 --name frontend_%computername% frontend
-docker ps
+cmd /c "run-docker.cmd"
 timeout 10

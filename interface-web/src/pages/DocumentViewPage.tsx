@@ -28,6 +28,8 @@ type DocumentNavigationState = {
   from?: string;
 };
 
+const HEADING_BLOCK_MAX_LENGTH = 90;
+
 const saveBlob = (blob: Blob, filename: string) => {
   const url = URL.createObjectURL(blob);
   const anchor = window.document.createElement("a");
@@ -38,6 +40,11 @@ const saveBlob = (blob: Blob, filename: string) => {
   anchor.remove();
   URL.revokeObjectURL(url);
 };
+
+const isHeadingBlock = (block: string) =>
+  block.length <= HEADING_BLOCK_MAX_LENGTH &&
+  !/[.!?]$/.test(block) &&
+  block.split(/\s+/).length <= 14;
 
 const DocumentViewPage = () => {
   const navigate = useNavigate();
@@ -133,9 +140,16 @@ const DocumentViewPage = () => {
     return <PageError title="Falha ao carregar o documento." onRetry={() => refetch()} />;
   }
 
+  const displayTitle = document.displayTitle || document.title;
+  const readingContent = document.formattedContent || document.content;
+  const readingBlocks = readingContent
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
   return (
     <div className="max-w-4xl mx-auto animate-fade-in">
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <Button
           variant="ghost"
           onClick={() => {
@@ -150,7 +164,7 @@ const DocumentViewPage = () => {
           <ArrowLeft className="h-4 w-4" />
           Voltar
         </Button>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 lg:justify-end">
           {resultIds.length > 1 && (
             <div className="hidden sm:flex items-center gap-1 mr-2">
               <Button
@@ -200,74 +214,127 @@ const DocumentViewPage = () => {
       </div>
 
       <div className="glass-card">
-        {/* PDF Viewer Placeholder */}
-          <div className="bg-muted/50 border-b border-border p-4 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+        <div className="border-b border-border bg-muted/40 p-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            Visualização completa do conteúdo extraído — {document.title}
+            <span className="font-medium text-foreground">Visualização completa do conteúdo extraído</span>
+          </div>
+          <p className="mt-2 break-words">
+            Leitura otimizada de <span className="font-medium text-foreground">{displayTitle}</span>.
+          </p>
+        </div>
+
+        <div className="border-b border-border p-6">
+          <div className="mb-6">
+            <h1 className="text-2xl font-semibold leading-tight text-foreground break-words">
+              {displayTitle}
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Documento indexado para leitura clara, preservando o arquivo original para download e reprocessamento.
+            </p>
           </div>
 
-        <div className="p-6 border-b border-border">
-          <h1 className="text-xl font-bold text-foreground mb-4">{document.title}</h1>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Tag className="h-3.5 w-3.5" />
-              <Badge variant="secondary">{document.category}</Badge>
-            </div>
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Calendar className="h-3.5 w-3.5" />
-              {new Date(document.date).toLocaleDateString("pt-BR")}
-            </div>
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <User className="h-3.5 w-3.5" />
-              {document.author}
-            </div>
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <FileText className="h-3.5 w-3.5" />
-              {document.documentType} · {document.format} · {document.size}
-            </div>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm mt-3">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Hash className="h-3.5 w-3.5" />
-              Versão {document.version}
-            </div>
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Clock className="h-3.5 w-3.5" />
-              Indexado em {document.indexedAt}
-            </div>
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <FileText className="h-3.5 w-3.5" />
-              {document.fileName}
-            </div>
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <User className="h-3.5 w-3.5" />
-              Enviado por {document.uploadedBy}
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm mt-3">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <FileText className="h-3.5 w-3.5" />
-              {document.mimeType}
-            </div>
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <FileText className="h-3.5 w-3.5" />
-              {document.extractedCharacters} caracteres extraídos
-            </div>
-            <div className="flex min-w-0 items-center gap-2 text-muted-foreground">
-              <Hash className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate" title={document.hash}>{document.hash}</span>
-            </div>
-            {currentResultIndex >= 0 && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                Resultado {currentResultIndex + 1} de {resultIds.length}
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div className="rounded-xl border border-border/70 bg-background/70 p-4">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                <Tag className="h-3.5 w-3.5" />
+                Classificação
               </div>
-            )}
+              <div className="flex flex-wrap items-center gap-2 text-sm text-foreground">
+                <Badge variant="secondary">{document.category}</Badge>
+                <span>{document.documentType}</span>
+                <span className="text-muted-foreground">·</span>
+                <span>{document.format}</span>
+                <span className="text-muted-foreground">·</span>
+                <span>{document.size}</span>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border/70 bg-background/70 p-4">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                <Calendar className="h-3.5 w-3.5" />
+                Datas
+              </div>
+              <div className="space-y-1 text-sm text-foreground">
+                <p>Documento: {new Date(document.date).toLocaleDateString("pt-BR")}</p>
+                <p className="text-muted-foreground">Indexado em {new Date(document.indexedAt).toLocaleString("pt-BR")}</p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border/70 bg-background/70 p-4">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                <User className="h-3.5 w-3.5" />
+                Responsáveis
+              </div>
+              <div className="space-y-1 text-sm text-foreground">
+                <p>{document.author}</p>
+                <p className="text-muted-foreground">Enviado por {document.uploadedBy}</p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border/70 bg-background/70 p-4 md:col-span-2 xl:col-span-1">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                <FileText className="h-3.5 w-3.5" />
+                Arquivo
+              </div>
+              <div className="space-y-1 text-sm text-foreground">
+                <p className="break-words">{document.fileName}</p>
+                <p className="text-muted-foreground">{document.mimeType}</p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border/70 bg-background/70 p-4">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                <Hash className="h-3.5 w-3.5" />
+                Controle
+              </div>
+              <div className="space-y-1 text-sm text-foreground">
+                <p>Versão {document.version}</p>
+                <p>{document.extractedCharacters.toLocaleString("pt-BR")} caracteres extraídos</p>
+                {currentResultIndex >= 0 && (
+                  <p className="text-muted-foreground">
+                    Resultado {currentResultIndex + 1} de {resultIds.length}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border/70 bg-background/70 p-4">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                <Clock className="h-3.5 w-3.5" />
+                Integridade
+              </div>
+              <div className="space-y-1 text-sm text-foreground">
+                <p className="break-all">{document.hash}</p>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="p-6">
-          <div className="prose prose-sm max-w-none text-foreground whitespace-pre-line leading-relaxed">
-            {document.content}
+        <div className="bg-background/80 p-6 md:p-8">
+          <div className="mx-auto max-w-3xl">
+            <div className="mb-6 border-b border-border/70 pb-4">
+              <p className="text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">
+                Texto formatado para leitura
+              </p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                O conteúdo abaixo reaproveita o texto extraído e reorganiza parágrafos e blocos para reduzir quebras ruins de linha.
+              </p>
+            </div>
+
+            <article className="space-y-4 text-[1.02rem] leading-8 text-foreground/90">
+              {readingBlocks.map((block, index) =>
+                isHeadingBlock(block) ? (
+                  <h2 key={`${index}-${block.slice(0, 20)}`} className="pt-2 text-lg font-semibold leading-7 text-foreground">
+                    {block}
+                  </h2>
+                ) : (
+                  <p key={`${index}-${block.slice(0, 20)}`} className="text-pretty">
+                    {block}
+                  </p>
+                ),
+              )}
+            </article>
           </div>
         </div>
       </div>

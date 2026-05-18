@@ -24,6 +24,7 @@ class TokenResponse(BaseModel):
     token: str
     access_token: str
     token_type: str = "bearer"
+    expiresAt: str | None = None
 
 
 class AuthenticatedUserResponse(BaseModel):
@@ -34,3 +35,7 @@ class AuthenticatedUserResponse(BaseModel):
     role: str
     active: bool
     perfil: str
+
+
+class LogoutResponse(BaseModel):
+    message: str

@@ -45,6 +45,7 @@ export type SearchResponse = {
   page: number;
   perPage: number;
   totalPages: number;
+  responseTimeMs: number;
   items: SearchResult[];
 };
 
@@ -91,6 +92,7 @@ export type SearchHistoryResponse = {
 export type DocumentDetails = {
   id: number;
   title: string;
+  displayTitle?: string;
   fileName: string;
   category: string;
   type: string;
@@ -108,6 +110,7 @@ export type DocumentDetails = {
   hash: string;
   downloadUrl?: string;
   content: string;
+  formattedContent?: string;
   extractedCharacters: number;
 };
 
@@ -227,8 +230,10 @@ export type MetricsOverview = {
   averageSearchTime: string;
   indexedDocuments: number;
   successRate: string;
-  averageResults: number;
+  averageResults: string;
   queriesToday: number;
+  queriesWithoutResults: number;
+  zeroResultsRate: string;
 };
 
 export type MetricsPoint = {
@@ -246,6 +251,7 @@ export type MetricsSnapshot = {
   queriesByDay: MetricsPoint[];
   topTerms: NamedValue[];
   documentsByCategory: NamedValue[];
+  queryOutcomeDistribution: NamedValue[];
 };
 
 export type HistoryEntry = {

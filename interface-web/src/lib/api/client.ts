@@ -1,4 +1,5 @@
 import { appEnv } from "@/lib/env";
+import { storageKeys } from "@/lib/storage";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -10,8 +11,14 @@ type RequestOptions = {
   query?: Record<string, string | number | undefined>;
 };
 
+export const authSessionExpiredEvent = "ifesdoc:session-expired";
+
+const clearStoredSession = () => {
+  localStorage.removeItem(storageKeys.session);
+};
+
 const readStoredToken = () => {
-  const raw = localStorage.getItem("ifesdoc.session");
+  const raw = localStorage.getItem(storageKeys.session);
   if (!raw) {
     return null;
   }
@@ -21,6 +28,13 @@ const readStoredToken = () => {
     return session.token ?? null;
   } catch {
     return null;
+  }
+};
+
+const notifyUnauthorized = () => {
+  clearStoredSession();
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(authSessionExpiredEvent));
   }
 };
 
@@ -63,6 +77,9 @@ export const apiRequest = async <T>(path: string, options: RequestOptions = {}):
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      notifyUnauthorized();
+    }
     let message = "Falha ao comunicar com a API.";
 
     try {
@@ -114,6 +131,9 @@ export const apiBlobRequest = async (
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      notifyUnauthorized();
+    }
     throw new ApiError("Falha ao baixar o arquivo solicitado.", response.status);
   }
 
