@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from sqlalchemy import distinct, func
 from sqlalchemy.orm import Session
 
+from app.core.logging import logger
 from app.domain.document import Document
 from app.domain.document_field import DocumentField
 from app.domain.document_history import DocumentHistory
@@ -22,6 +23,11 @@ class InvertedIndexService:
         history: DocumentHistory,
         fields: list[dict],
     ) -> dict:
+        logger.debug(
+            "Persistindo campos do histórico %s: %s campo(s)",
+            history.cod_historico_documento,
+            len(fields),
+        )
         affected_term_ids = self._remove_previous_index_entries(
             db,
             history_id=history.cod_historico_documento,
@@ -88,12 +94,21 @@ class InvertedIndexService:
             .all()
         ]
         if not existing_field_ids:
+            logger.info(
+                "Nenhum índice encontrado para remoção do documento %s",
+                document_id,
+            )
             return {
                 "removed_postings": 0,
                 "removed_fields": 0,
                 "affected_terms": 0,
             }
 
+        logger.info(
+            "Removendo índice existente para documento %s: %s campo(s) encontrados",
+            document_id,
+            len(existing_field_ids),
+        )
         affected_term_ids = {
             row.cod_termo
             for row in db.query(InvertedIndex.cod_termo)
@@ -112,6 +127,13 @@ class InvertedIndexService:
             .delete(synchronize_session=False)
         )
         self.refresh_all_term_statistics(db)
+        logger.info(
+            "Remoção indexada do documento %s concluída: %s postings apagados, %s campos apagados, %s termos afetados",
+            document_id,
+            removed_postings,
+            removed_fields,
+            len(affected_term_ids),
+        )
         return {
             "removed_postings": removed_postings,
             "removed_fields": removed_fields,
@@ -248,6 +270,7 @@ class InvertedIndexService:
         Returns:
             Número de termos processados.
         """
+        logger.info("Atualizando estatísticas de todos os termos no índice")
         active_document_count = (
             db.query(func.count(Document.cod_documento))
             .filter(Document.ativo.is_(True))
@@ -266,6 +289,10 @@ class InvertedIndexService:
                 term.idf = 0
 
         db.flush()
+        logger.info(
+            "Estatísticas de termos atualizadas para %s termo(s)",
+            len(terms),
+        )
         return len(terms)
 
     def _document_frequency(self, db: Session, term_id: int) -> int:

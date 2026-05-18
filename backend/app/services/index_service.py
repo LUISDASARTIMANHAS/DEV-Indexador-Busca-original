@@ -5,6 +5,7 @@ import time
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
+from app.core.logging import logger
 from app.domain.document import Document
 from app.domain.document_field import DocumentField
 from app.domain.document_history import DocumentHistory
@@ -65,6 +66,12 @@ class IndexService:
         if document_history is None:
             raise DocumentNotFoundException("Versão ativa do documento não encontrada.")
 
+        logger.info(
+            "Processando indexação do documento %s trigger=%s usuario=%s",
+            document_id,
+            trigger_label,
+            triggered_by.nome,
+        )
         started_at = time.perf_counter()
         payload = self.document_repository.get_document_payload(db, document_id)
         context = {
@@ -85,6 +92,11 @@ class IndexService:
                 )
             db.flush()
             db.commit()
+            logger.info(
+                "Indexação do documento %s concluída em %sms",
+                document_id,
+                int((time.perf_counter() - started_at) * 1000),
+            )
         except Exception as exc:
             db.add(
                 IndexHistory(
@@ -94,6 +106,11 @@ class IndexService:
                 )
             )
             db.commit()
+            logger.exception(
+                "Falha na indexação do documento %s depois de %sms",
+                document_id,
+                int((time.perf_counter() - started_at) * 1000),
+            )
             raise
 
         administrative_history_service.log_action(
@@ -137,6 +154,7 @@ class IndexService:
         ]
 
     def reindex_document(self, db: Session, *, document_id: int, triggered_by: User) -> dict:
+        logger.info("Iniciando reindexação do documento %s", document_id)
         inverted_index_service.remove_document_terms(db, document_id=document_id)
         return self.process_document(
             db,
@@ -160,18 +178,33 @@ class IndexService:
             .all()
         ]
 
+        logger.info(
+            "Iniciando reindexação de todos os documentos: encontrado(s) %s documento(s)",
+            len(document_ids),
+        )
         success_count = 0
         failure_count = 0
         for document_id in document_ids:
             try:
                 self.reindex_document(db, document_id=document_id, triggered_by=triggered_by)
                 success_count += 1
-            except Exception:
+                logger.debug("Reindexação bem-sucedida para documento %s", document_id)
+            except Exception as exc:
                 db.rollback()
                 failure_count += 1
+                logger.warning(
+                    "Falha na reindexação do documento %s: %s",
+                    document_id,
+                    exc,
+                )
 
         inverted_index_service.refresh_all_term_statistics(db)
         db.commit()
+        logger.info(
+            "Reindexação de todos os documentos concluída: %s sucesso(s), %s falha(s)",
+            success_count,
+            failure_count,
+        )
 
         return {
             "processedDocuments": len(document_ids),
@@ -194,10 +227,16 @@ class IndexService:
             Dicionário com o resumo da otimização.
         """
         started_at = time.perf_counter()
+        logger.info("Iniciando otimização do índice")
         term_count = inverted_index_service.refresh_all_term_statistics(db)
         db.commit()
 
         duration_ms = int((time.perf_counter() - started_at) * 1000)
+        logger.info(
+            "Otimização do índice concluída em %sms com %s termos atualizados",
+            duration_ms,
+            term_count,
+        )
         administrative_history_service.log_action(
             db,
             actor=triggered_by,
