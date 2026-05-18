@@ -98,6 +98,8 @@ Request HTTP
 - **Rastreabilidade é central**: nunca deletar eventos de ingestão, indexação ou busca. Usar flags `ativo` ou tabelas de histórico.
 - **Versionamento documental**: `historico_documento` armazena versões; `versao_ativa` indica qual está vigente.
 - **Índice invertido relacional**: `INDICE_INVERTIDO` conecta `TERMO` a `CAMPO_DOCUMENTO` com `tf` e `posicao_inicial`. Os cálculos de `df` e `idf` são derivados.
+- **Persistência do índice**: o índice é armazenado no banco de dados e deve permanecer disponível entre reinicializações do sistema.
+- **Atualização incremental**: novos documentos e atualizações de documentos existentes atualizam o índice sem reconstruir todo o índice.
 - **Feedback fecha o ciclo**: `feedback_relevancia` liga `historico_busca`, `usuario` e `documento`.
 
 ---

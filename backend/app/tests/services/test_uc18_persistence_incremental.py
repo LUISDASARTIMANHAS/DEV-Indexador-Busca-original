@@ -99,15 +99,9 @@ def test_incremental_update_and_global_refresh():
     assert term1.idf == expected_idf_n1
 
     term2 = db.query(Term).filter(Term.texto_termo == "termo2").one()
-    # term2 was NOT affected by Doc 2, so it stays with N=1 values (stale)
-    assert term2.df == 1
-    assert term2.idf == expected_idf_n1 # Still 693
-
-    # Now refresh ALL to fix consistency
-    inverted_index_service.refresh_all_term_statistics(db)
-    db.refresh(term2)
-    # N=2, df=1 -> idf = log((2+1)/(1+1) + 1) = log(2.5) ~= 0.916 -> 916
+    # term2 should also have updated idf automatically because the active document count changed.
     expected_idf_term2_n2 = int(round(math.log(2.5) * 1000))
+    assert term2.df == 1
     assert term2.idf == expected_idf_term2_n2
 
     # 3. Test global refresh again with another document

@@ -69,7 +69,7 @@ class InvertedIndexService:
 
         history.texto_processado = "\n".join(processed_segments)
         db.flush()
-        self._refresh_term_statistics(db, affected_term_ids)
+        self.refresh_all_term_statistics(db)
 
         return {
             "term_count": total_term_count,
@@ -111,7 +111,7 @@ class InvertedIndexService:
             .filter(DocumentField.cod_campo_documento.in_(existing_field_ids))
             .delete(synchronize_session=False)
         )
-        self._refresh_term_statistics(db, affected_term_ids)
+        self.refresh_all_term_statistics(db)
         return {
             "removed_postings": removed_postings,
             "removed_fields": removed_fields,
