@@ -239,6 +239,35 @@ class InvertedIndexService:
             else:
                 term.idf = 0
 
+    def refresh_all_term_statistics(self, db: Session) -> int:
+        """Atualiza df e idf para todos os termos existentes no sistema.
+
+        Args:
+            db: Sessão do banco de dados.
+
+        Returns:
+            Número de termos processados.
+        """
+        active_document_count = (
+            db.query(func.count(Document.cod_documento))
+            .filter(Document.ativo.is_(True))
+            .scalar()
+            or 0
+        )
+
+        terms = db.query(Term).all()
+        for term in terms:
+            document_frequency = self._document_frequency(db, term.cod_termo)
+            term.df = document_frequency
+            if document_frequency > 0 and active_document_count > 0:
+                scaled_idf = math.log((active_document_count + 1) / (document_frequency + 1) + 1)
+                term.idf = max(int(round(scaled_idf * 1000)), 1)
+            else:
+                term.idf = 0
+
+        db.flush()
+        return len(terms)
+
     def _document_frequency(self, db: Session, term_id: int) -> int:
         return (
             db.query(func.count(distinct(Document.cod_documento)))
