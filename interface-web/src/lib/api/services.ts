@@ -1,7 +1,10 @@
 import { ApiError, apiBlobRequest, apiRequest } from "@/lib/api/client";
 import {
+  mockAccessedDocuments,
   defaultSettings,
   mockBatchFiles,
+  mockMetricCalculations,
+  mockMetricsReport,
   mockDocuments,
   mockHistory,
   mockIndexStatus,
@@ -27,6 +30,9 @@ import type {
   IndexStatusSnapshot,
   IngestionBatchFile,
   IngestionHistoryEntry,
+  MetricCalculation,
+  MetricsReport,
+  MetricsReportFilters,
   MetricsSnapshot,
   ReindexResult,
   SearchFilters,
@@ -42,6 +48,7 @@ import type {
 const delay = (ms = 350) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let mockNotificationStore = mockNotifications.map((notification) => ({ ...notification }));
+let mockMetricCalculationStore = mockMetricCalculations.map((item) => ({ ...item }));
 
 const shouldUseMocks = () => appEnv.useMockApi;
 
@@ -478,10 +485,99 @@ export const metricsService = {
   async snapshot(): Promise<MetricsSnapshot> {
     if (shouldUseMocks()) {
       await delay(200);
-      return mockMetrics;
+      return {
+        ...mockMetrics,
+        recentCalculations: mockMetricCalculationStore.slice(0, 5),
+      };
     }
 
     return apiRequest<MetricsSnapshot>("/api/v1/metrics");
+  },
+
+  async report(filters: MetricsReportFilters = {}): Promise<MetricsReport> {
+    if (shouldUseMocks()) {
+      await delay(200);
+      return {
+        ...mockMetricsReport,
+        accessedDocuments: [...mockAccessedDocuments],
+        storedCalculation: mockMetricCalculationStore[0] ?? null,
+      };
+    }
+
+    return apiRequest<MetricsReport>("/api/v1/metrics/report", {
+      query: {
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
+      },
+    });
+  },
+
+  async calculations(limit = 10): Promise<MetricCalculation[]> {
+    if (shouldUseMocks()) {
+      await delay(150);
+      return mockMetricCalculationStore.slice(0, limit);
+    }
+
+    return apiRequest<MetricCalculation[]>("/api/v1/metrics/calculations", {
+      query: { limit },
+    });
+  },
+
+  async persistCalculation(filters: MetricsReportFilters = {}): Promise<MetricCalculation> {
+    if (shouldUseMocks()) {
+      await delay(250);
+      const created: MetricCalculation = {
+        id: Date.now(),
+        periodStart: filters.dateFrom ? `${filters.dateFrom}T00:00:00` : mockMetricsReport.summary.periodStart,
+        periodEnd: filters.dateTo ? `${filters.dateTo}T23:59:59` : mockMetricsReport.summary.periodEnd,
+        totalQueries: mockMetricsReport.summary.totalQueries,
+        averageResponseTimeMs: mockMetricsReport.summary.averageResponseTimeMs,
+        averageResults: mockMetricsReport.summary.averageResults,
+        queriesWithoutResults: mockMetricsReport.summary.queriesWithoutResults,
+        calculatedAt: new Date().toISOString(),
+      };
+      mockMetricCalculationStore = [created, ...mockMetricCalculationStore];
+      return created;
+    }
+
+    return apiRequest<MetricCalculation>("/api/v1/metrics/calculations", {
+      method: "POST",
+      query: {
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
+      },
+    });
+  },
+
+  async exportReport(
+    format: "csv" | "json",
+    filters: MetricsReportFilters = {},
+  ): Promise<{ blob: Blob; filename: string | null }> {
+    if (shouldUseMocks()) {
+      await delay(180);
+      const content = format === "json"
+        ? JSON.stringify(mockMetricsReport, null, 2)
+        : [
+            "section,key,value",
+            `summary,totalQueries,${mockMetricsReport.summary.totalQueries}`,
+            `summary,mostFrequentQuery,${mockMetricsReport.summary.mostFrequentQuery ?? ""}`,
+            `frequentQueries,${mockMetricsReport.frequentQueries[0]?.query ?? ""},${mockMetricsReport.frequentQueries[0]?.count ?? 0}`,
+          ].join("\n");
+      return {
+        blob: new Blob([content], {
+          type: format === "json" ? "application/json;charset=utf-8" : "text/csv;charset=utf-8",
+        }),
+        filename: `relatorio-busca-mock.${format}`,
+      };
+    }
+
+    return apiBlobRequest("/api/v1/metrics/report/export", {
+      query: {
+        format,
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
+      },
+    });
   },
 };
 

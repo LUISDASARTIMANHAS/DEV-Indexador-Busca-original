@@ -94,6 +94,23 @@ CREATE TABLE IF NOT EXISTS historico_busca (
         CHECK (tempo_resposta_ms >= 0)
 );
 
+CREATE TABLE IF NOT EXISTS acesso_documento (
+    cod_acesso_documento BIGSERIAL PRIMARY KEY,
+    cod_documento BIGINT NOT NULL,
+    cod_usuario BIGINT NOT NULL,
+    tipo_acesso VARCHAR(20) NOT NULL,
+    origem VARCHAR(80),
+    criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_acesso_documento_documento
+        FOREIGN KEY (cod_documento)
+        REFERENCES documento (cod_documento),
+    CONSTRAINT fk_acesso_documento_usuario
+        FOREIGN KEY (cod_usuario)
+        REFERENCES usuario (cod_usuario),
+    CONSTRAINT chk_acesso_documento_tipo
+        CHECK (tipo_acesso IN ('view', 'download', 'export'))
+);
+
 CREATE TABLE IF NOT EXISTS historico_administrativo (
     cod_historico_administrativo BIGSERIAL PRIMARY KEY,
     cod_usuario BIGINT NOT NULL,
@@ -282,6 +299,15 @@ CREATE INDEX IF NOT EXISTS idx_historico_busca_usuario
 
 CREATE INDEX IF NOT EXISTS idx_historico_busca_criado_em
     ON historico_busca (criado_em);
+
+CREATE INDEX IF NOT EXISTS idx_acesso_documento_documento
+    ON acesso_documento (cod_documento);
+
+CREATE INDEX IF NOT EXISTS idx_acesso_documento_usuario
+    ON acesso_documento (cod_usuario);
+
+CREATE INDEX IF NOT EXISTS idx_acesso_documento_criado_em
+    ON acesso_documento (criado_em);
 
 CREATE INDEX IF NOT EXISTS idx_historico_administrativo_usuario
     ON historico_administrativo (cod_usuario);

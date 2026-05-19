@@ -11,6 +11,7 @@ import {
   userService,
 } from "@/lib/api/services";
 import type { SearchFilters, SearchHistoryFilters } from "@/types/app";
+import type { MetricsReportFilters } from "@/types/app";
 
 export const useRecentSearches = () =>
   useQuery({
@@ -67,6 +68,18 @@ export const useMetrics = () =>
   useQuery({
     queryKey: ["metrics"],
     queryFn: () => metricsService.snapshot(),
+  });
+
+export const useMetricsReport = (filters: MetricsReportFilters) =>
+  useQuery({
+    queryKey: ["metrics-report", filters],
+    queryFn: () => metricsService.report(filters),
+  });
+
+export const useMetricCalculations = (limit = 10) =>
+  useQuery({
+    queryKey: ["metric-calculations", limit],
+    queryFn: () => metricsService.calculations(limit),
   });
 
 export const useHistory = (enabled = true) =>

@@ -1,0 +1,10 @@
+[tool.pytest.ini_options]
+pythonpath = [
+  ".",
+  "backend",
+]
+testpaths = [
+  "backend/app/tests",
+  "backend/pipeline_indexador/src/tests",
+  "backend/tests",
+]

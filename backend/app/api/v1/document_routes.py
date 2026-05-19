@@ -18,6 +18,7 @@ from app.schemas.document_schema import (
 )
 from app.schemas.index_schema import ReindexResponse
 from app.services.document_service import document_service
+from app.services.metrics_service import metrics_service
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
@@ -26,9 +27,16 @@ router = APIRouter(prefix="/documents", tags=["Documents"])
 def get_document(
     document_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     payload = document_service.get_document_payload(db, document_id)
+    metrics_service.register_document_access(
+        db,
+        document_id=document_id,
+        user_id=current_user.cod_usuario,
+        access_type="view",
+        origin="document-view",
+    )
     return document_service.to_details_response(payload)
 
 
@@ -100,9 +108,16 @@ def restore_document_version(
 def download_document(
     document_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     file_path, file_name, media_type = document_service.get_document_file(db, document_id)
+    metrics_service.register_document_access(
+        db,
+        document_id=document_id,
+        user_id=current_user.cod_usuario,
+        access_type="download",
+        origin="document-download",
+    )
     return FileResponse(path=file_path, filename=file_name, media_type=media_type)
 
 
@@ -111,12 +126,19 @@ def export_document(
     document_id: int,
     format: str = Query("txt", pattern="^(txt|json)$"),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     content, file_name, media_type = document_service.export_document(
         db,
         document_id=document_id,
         export_format=format,
+    )
+    metrics_service.register_document_access(
+        db,
+        document_id=document_id,
+        user_id=current_user.cod_usuario,
+        access_type="export",
+        origin=f"document-export:{format}",
     )
     return Response(
         content=content,

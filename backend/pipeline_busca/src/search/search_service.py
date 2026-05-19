@@ -1,9 +1,9 @@
-from src.pipeline.search_pipeline import SearchPipeline
-from src.stages.queryPreprocessStage import QueryPreprocessStage
-from src.stages.searchIndexStage import SearchIndexStage
-from src.stages.rankResultsStage import RankResultsStage
-from src.storage.index_repository import IndexRepository
-from src.stages.queryTokenizeStage import QueryTokenizeStage
+from pipeline_busca.src.pipeline.search_pipeline import SearchPipeline
+from pipeline_busca.src.stages.queryPreprocessStage import QueryPreprocessStage
+from pipeline_busca.src.stages.searchIndexStage import SearchIndexStage
+from pipeline_busca.src.stages.rankResultsStage import RankResultsStage
+from pipeline_busca.src.storage.index_repository import IndexRepository
+from pipeline_busca.src.stages.queryTokenizeStage import QueryTokenizeStage
 
 
 class SearchService:

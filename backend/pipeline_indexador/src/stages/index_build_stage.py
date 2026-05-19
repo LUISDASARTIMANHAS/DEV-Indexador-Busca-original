@@ -1,4 +1,4 @@
-from src.pipeline.pipeline_stage import PipelineStage
+from pipeline_indexador.src.pipeline.pipeline_stage import PipelineStage
 
 
 class IndexBuildStage(PipelineStage):

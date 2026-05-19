@@ -252,6 +252,64 @@ export type MetricsSnapshot = {
   topTerms: NamedValue[];
   documentsByCategory: NamedValue[];
   queryOutcomeDistribution: NamedValue[];
+  recentCalculations: MetricCalculation[];
+};
+
+export type MetricCalculation = {
+  id: number;
+  periodStart: string;
+  periodEnd: string;
+  totalQueries: number;
+  averageResponseTimeMs: number;
+  averageResults: string;
+  queriesWithoutResults: number;
+  calculatedAt: string;
+};
+
+export type FrequentQueryMetric = {
+  query: string;
+  count: number;
+  averageResponseTimeMs: number;
+  averageResults: string;
+};
+
+export type AccessedDocumentMetric = {
+  id: number;
+  title: string;
+  category: string;
+  accessCount: number;
+  viewCount: number;
+  downloadCount: number;
+  exportCount: number;
+  lastAccessedAt?: string | null;
+};
+
+export type MetricsReportFilters = {
+  dateFrom?: string;
+  dateTo?: string;
+};
+
+export type MetricsReportSummary = {
+  periodStart: string;
+  periodEnd: string;
+  totalQueries: number;
+  uniqueQueries: number;
+  averageResponseTimeMs: number;
+  averageResults: string;
+  queriesWithoutResults: number;
+  zeroResultsRate: string;
+  indexedDocuments: number;
+  mostFrequentQuery?: string | null;
+  mostAccessedDocument?: string | null;
+};
+
+export type MetricsReport = {
+  summary: MetricsReportSummary;
+  frequentQueries: FrequentQueryMetric[];
+  zeroResultQueries: FrequentQueryMetric[];
+  topTerms: NamedValue[];
+  accessedDocuments: AccessedDocumentMetric[];
+  storedCalculation?: MetricCalculation | null;
 };
 
 export type HistoryEntry = {

@@ -1,4 +1,4 @@
-from src.indexer.indexer_service import IndexerService
+from pipeline_indexador.src.indexer.indexer_service import IndexerService
 
 
 def main():

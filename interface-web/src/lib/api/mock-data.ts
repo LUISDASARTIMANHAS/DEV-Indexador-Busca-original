@@ -1,10 +1,13 @@
 import type {
+  AccessedDocumentMetric,
   AppSettings,
   DocumentDetails,
   HistoryEntry,
   IndexStatusSnapshot,
   IngestionBatchFile,
   IngestionHistoryEntry,
+  MetricCalculation,
+  MetricsReport,
   MetricsSnapshot,
   AppNotification,
   SearchHistoryEntry,
@@ -347,6 +350,110 @@ export const mockMetrics: MetricsSnapshot = {
     { name: "Com resultados", value: 1679 },
     { name: "Sem resultados", value: 214 },
   ],
+  recentCalculations: [
+    {
+      id: 41,
+      periodStart: "2026-05-01T00:00:00",
+      periodEnd: "2026-05-18T23:59:59",
+      totalQueries: 1893,
+      averageResponseTimeMs: 340,
+      averageResults: "8.3",
+      queriesWithoutResults: 214,
+      calculatedAt: "2026-05-18T10:30:00",
+    },
+    {
+      id: 40,
+      periodStart: "2026-04-01T00:00:00",
+      periodEnd: "2026-04-30T23:59:59",
+      totalQueries: 1627,
+      averageResponseTimeMs: 362,
+      averageResults: "7.9",
+      queriesWithoutResults: 201,
+      calculatedAt: "2026-05-01T08:00:00",
+    },
+  ],
+};
+
+export const mockMetricCalculations: MetricCalculation[] = [
+  ...mockMetrics.recentCalculations,
+  {
+    id: 39,
+    periodStart: "2026-03-01T00:00:00",
+    periodEnd: "2026-03-31T23:59:59",
+    totalQueries: 1410,
+    averageResponseTimeMs: 389,
+    averageResults: "7.4",
+    queriesWithoutResults: 188,
+    calculatedAt: "2026-04-01T08:00:00",
+  },
+];
+
+export const mockAccessedDocuments: AccessedDocumentMetric[] = [
+  {
+    id: 1,
+    title: "Resolução Normativa nº 45/2025 - Normas Acadêmicas",
+    category: "Acadêmico",
+    accessCount: 82,
+    viewCount: 61,
+    downloadCount: 14,
+    exportCount: 7,
+    lastAccessedAt: "2026-05-18T09:32:00",
+  },
+  {
+    id: 2,
+    title: "Edital de Seleção 012/2025 - Programa de Monitoria",
+    category: "Acadêmico",
+    accessCount: 64,
+    viewCount: 48,
+    downloadCount: 10,
+    exportCount: 6,
+    lastAccessedAt: "2026-05-18T08:12:00",
+  },
+  {
+    id: 3,
+    title: "Relatório de Gestão 2024 - Campus Serra",
+    category: "Administrativo",
+    accessCount: 39,
+    viewCount: 30,
+    downloadCount: 5,
+    exportCount: 4,
+    lastAccessedAt: "2026-05-17T17:42:00",
+  },
+];
+
+export const mockMetricsReport: MetricsReport = {
+  summary: {
+    periodStart: "2026-05-01T00:00:00",
+    periodEnd: "2026-05-18T23:59:59",
+    totalQueries: 1893,
+    uniqueQueries: 732,
+    averageResponseTimeMs: 340,
+    averageResults: "8.3",
+    queriesWithoutResults: 214,
+    zeroResultsRate: "11.3%",
+    indexedDocuments: 1247,
+    mostFrequentQuery: "resolução normativa",
+    mostAccessedDocument: "Resolução Normativa nº 45/2025 - Normas Acadêmicas",
+  },
+  frequentQueries: [
+    { query: "resolução normativa", count: 96, averageResponseTimeMs: 284, averageResults: "6.2" },
+    { query: "edital 2025", count: 73, averageResponseTimeMs: 251, averageResults: "5.4" },
+    { query: "relatório gestão", count: 52, averageResponseTimeMs: 308, averageResults: "4.1" },
+    { query: "portaria interna", count: 41, averageResponseTimeMs: 222, averageResults: "7.0" },
+  ],
+  zeroResultQueries: [
+    { query: "normativa estagio doutorado", count: 16, averageResponseTimeMs: 401, averageResults: "0.0" },
+    { query: "processo seletivo biblioteca 2022", count: 11, averageResponseTimeMs: 365, averageResults: "0.0" },
+    { query: "manual laboratorio agroindustria", count: 9, averageResponseTimeMs: 348, averageResults: "0.0" },
+  ],
+  topTerms: [
+    { name: "resolução", value: 124 },
+    { name: "edital", value: 98 },
+    { name: "relatório", value: 76 },
+    { name: "portaria", value: 41 },
+  ],
+  accessedDocuments: mockAccessedDocuments,
+  storedCalculation: mockMetricCalculations[0],
 };
 
 export const mockHistory: HistoryEntry[] = [
