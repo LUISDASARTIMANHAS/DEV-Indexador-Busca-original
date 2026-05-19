@@ -12,6 +12,7 @@ from starlette.requests import Request
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.database import Base, engine
+from app.core.logging import logger
 from app.domain.administrative_history import AdministrativeHistory
 from app.domain.document_category import DocumentCategory
 from app.domain.document_access_history import DocumentAccessHistory
@@ -35,14 +36,17 @@ from app.domain.user_session import UserSession
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    logger.info("Inicializando aplicação e criando tabelas no banco de dados")
     try:
         Base.metadata.create_all(bind=engine)
-    except OperationalError:
-        pass
+        logger.info("Banco de dados inicializado com sucesso")
+    except OperationalError as exc:
+        logger.warning("Falha ao inicializar o schema do banco de dados: %s", exc)
     yield
 
 
 app = FastAPI(title="IFESDOC API", lifespan=lifespan)
+logger.info("IFESDOC API criada com sucesso")
 
 app.add_middleware(
     CORSMiddleware,
@@ -71,6 +75,7 @@ async def http_exception_handler(_: Request, exc: StarletteHTTPException):
     else:
         message = "Erro na requisição."
 
+    logger.warning("HTTPException %s: %s", exc.status_code, message)
     return JSONResponse(
         status_code=exc.status_code,
         content={"message": message},
@@ -81,6 +86,7 @@ async def http_exception_handler(_: Request, exc: StarletteHTTPException):
 async def validation_exception_handler(_: Request, exc: RequestValidationError):
     first_error = exc.errors()[0] if exc.errors() else None
     message = first_error.get("msg", "Dados inválidos.") if first_error else "Dados inválidos."
+    logger.warning("RequestValidationError: %s", exc.errors())
     return JSONResponse(
         status_code=422,
         content={"message": message},
@@ -88,7 +94,8 @@ async def validation_exception_handler(_: Request, exc: RequestValidationError):
 
 
 @app.exception_handler(OperationalError)
-async def database_unavailable_handler(_: Request, __: OperationalError):
+async def database_unavailable_handler(_: Request, exc: OperationalError):
+    logger.error("Banco de dados indisponível: %s", exc)
     return JSONResponse(
         status_code=503,
         content={"message": "Banco de dados indisponível. Verifique se o PostgreSQL está em execução."},
@@ -96,7 +103,8 @@ async def database_unavailable_handler(_: Request, __: OperationalError):
 
 
 @app.exception_handler(ProgrammingError)
-async def database_schema_handler(_: Request, __: ProgrammingError):
+async def database_schema_handler(_: Request, exc: ProgrammingError):
+    logger.error("Erro de schema do banco de dados: %s", exc)
     return JSONResponse(
         status_code=503,
         content={"message": "Estrutura do banco não inicializada. Reinicie a API com o PostgreSQL ativo ou rode a criação do schema."},
@@ -105,4 +113,5 @@ async def database_schema_handler(_: Request, __: ProgrammingError):
 
 @app.get("/")
 def root():
+    logger.info("GET / - healthcheck acessado")
     return {"message": "IFESDOC rodando 🚀"}

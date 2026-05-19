@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from sqlalchemy import distinct, func
 from sqlalchemy.orm import Session
 
+from app.core.logging import logger
 from app.domain.document import Document
 from app.domain.document_field import DocumentField
 from app.domain.document_history import DocumentHistory
@@ -22,6 +23,11 @@ class InvertedIndexService:
         history: DocumentHistory,
         fields: list[dict],
     ) -> dict:
+        logger.debug(
+            "Persistindo campos do histórico %s: %s campo(s)",
+            history.cod_historico_documento,
+            len(fields),
+        )
         affected_term_ids = self._remove_previous_index_entries(
             db,
             history_id=history.cod_historico_documento,
@@ -69,7 +75,7 @@ class InvertedIndexService:
 
         history.texto_processado = "\n".join(processed_segments)
         db.flush()
-        self._refresh_term_statistics(db, affected_term_ids)
+        self.refresh_all_term_statistics(db)
 
         return {
             "term_count": total_term_count,
@@ -88,12 +94,21 @@ class InvertedIndexService:
             .all()
         ]
         if not existing_field_ids:
+            logger.info(
+                "Nenhum índice encontrado para remoção do documento %s",
+                document_id,
+            )
             return {
                 "removed_postings": 0,
                 "removed_fields": 0,
                 "affected_terms": 0,
             }
 
+        logger.info(
+            "Removendo índice existente para documento %s: %s campo(s) encontrados",
+            document_id,
+            len(existing_field_ids),
+        )
         affected_term_ids = {
             row.cod_termo
             for row in db.query(InvertedIndex.cod_termo)
@@ -111,7 +126,14 @@ class InvertedIndexService:
             .filter(DocumentField.cod_campo_documento.in_(existing_field_ids))
             .delete(synchronize_session=False)
         )
-        self._refresh_term_statistics(db, affected_term_ids)
+        self.refresh_all_term_statistics(db)
+        logger.info(
+            "Remoção indexada do documento %s concluída: %s postings apagados, %s campos apagados, %s termos afetados",
+            document_id,
+            removed_postings,
+            removed_fields,
+            len(affected_term_ids),
+        )
         return {
             "removed_postings": removed_postings,
             "removed_fields": removed_fields,
@@ -238,6 +260,40 @@ class InvertedIndexService:
                 term.idf = max(int(round(scaled_idf * 1000)), 1)
             else:
                 term.idf = 0
+
+    def refresh_all_term_statistics(self, db: Session) -> int:
+        """Atualiza df e idf para todos os termos existentes no sistema.
+
+        Args:
+            db: Sessão do banco de dados.
+
+        Returns:
+            Número de termos processados.
+        """
+        logger.info("Atualizando estatísticas de todos os termos no índice")
+        active_document_count = (
+            db.query(func.count(Document.cod_documento))
+            .filter(Document.ativo.is_(True))
+            .scalar()
+            or 0
+        )
+
+        terms = db.query(Term).all()
+        for term in terms:
+            document_frequency = self._document_frequency(db, term.cod_termo)
+            term.df = document_frequency
+            if document_frequency > 0 and active_document_count > 0:
+                scaled_idf = math.log((active_document_count + 1) / (document_frequency + 1) + 1)
+                term.idf = max(int(round(scaled_idf * 1000)), 1)
+            else:
+                term.idf = 0
+
+        db.flush()
+        logger.info(
+            "Estatísticas de termos atualizadas para %s termo(s)",
+            len(terms),
+        )
+        return len(terms)
 
     def _document_frequency(self, db: Session, term_id: int) -> int:
         return (

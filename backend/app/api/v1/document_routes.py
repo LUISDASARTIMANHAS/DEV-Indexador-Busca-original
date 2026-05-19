@@ -2,6 +2,8 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse, Response
+
+from app.core.logging import logger
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -177,10 +179,21 @@ def reindex_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
+    logger.info(
+        "Requisição de reindexação do documento %s recebida por usuário %s (%s)",
+        document_id,
+        current_user.nome,
+        current_user.cod_usuario,
+    )
     result = document_service.reindex_document(
         db,
         document_id=document_id,
         triggered_by=current_user,
+    )
+    logger.info(
+        "Documento %s reindexado com sucesso com %s termos",
+        document_id,
+        result["termCount"],
     )
     return {
         "processedDocuments": 1,
