@@ -1,4 +1,4 @@
-from src.pipeline.pipeline_stage import PipelineStage
+from pipeline_busca.src.pipeline.pipeline_stage import PipelineStage
 from collections import Counter
 
 class RankResultsStage(PipelineStage):

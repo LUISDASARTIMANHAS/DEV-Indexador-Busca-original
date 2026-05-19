@@ -1,6 +1,6 @@
 import re
 import unicodedata
-from src.pipeline.pipeline_stage import PipelineStage
+from pipeline_indexador.src.pipeline.pipeline_stage import PipelineStage
 
 
 class PreprocessStage(PipelineStage):

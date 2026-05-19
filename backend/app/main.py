@@ -114,4 +114,4 @@ async def database_schema_handler(_: Request, exc: ProgrammingError):
 @app.get("/")
 def root():
     logger.info("GET / - healthcheck acessado")
-    return {"message": "IFESDOC rodando 🚀"}
+    return {"message": "IFESDOC API running"}

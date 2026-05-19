@@ -1,4 +1,4 @@
-from src.search.search_service import SearchService
+from pipeline_busca.src.search.search_service import SearchService
 
 
 def main():

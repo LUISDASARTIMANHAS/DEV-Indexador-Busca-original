@@ -54,7 +54,7 @@ def upload_document(
     response = document_service.to_upload_response(document)
     logger.info(
         "Upload de documento concluído: document_id=%s title=%s",
-        response["documentId"],
+        response["id"],
         response["title"],
     )
     return response

@@ -1,8 +1,8 @@
-from src.pipeline.index_pipeline import IndexPipeline
-from src.stages.preprocess_stage import PreprocessStage
-from src.stages.tokenize_stage import TokenizeStage
-from src.stages.index_build_stage import IndexBuildStage
-from src.storage.index_repository import IndexRepository
+from pipeline_indexador.src.pipeline.index_pipeline import IndexPipeline
+from pipeline_indexador.src.stages.preprocess_stage import PreprocessStage
+from pipeline_indexador.src.stages.tokenize_stage import TokenizeStage
+from pipeline_indexador.src.stages.index_build_stage import IndexBuildStage
+from pipeline_indexador.src.storage.index_repository import IndexRepository
 
 
 class IndexerService:
