@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.database import Base, engine
 from app.domain.administrative_history import AdministrativeHistory
 from app.domain.document_category import DocumentCategory
+from app.domain.document_access_history import DocumentAccessHistory
 from app.domain.document_field import DocumentField
 from app.domain.document_history import DocumentHistory
 from app.domain.document_metadata import DocumentMetadata
@@ -22,6 +23,7 @@ from app.domain.index_history import IndexHistory
 from app.domain.ingestion_history import IngestionHistory
 from app.domain.ingestion_status import IngestionStatus
 from app.domain.inverted_index import InvertedIndex
+from app.domain.metric_calculation import MetricCalculation
 from app.domain.invalid_document import InvalidDocument
 from app.domain.document import Document
 from app.domain.notification import Notification
