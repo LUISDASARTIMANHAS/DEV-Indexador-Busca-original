@@ -2,16 +2,23 @@
 
 FROM node:20-alpine
 
+# Define /app como diretório principal dentro do container.
 WORKDIR /app
 
+# Copia:
+# package.json
+# package-lock.json (se existir)
 COPY package*.json ./
 
 # cache npm
 RUN --mount=type=cache,target=/root/.npm \
     npm install
 
+# Copia todo o restante do projeto para dentro do container.
 COPY . .
 
+# Documenta que a aplicação usa a porta 8080.
+# Não abre a porta automaticamente, apenas informa ao Docker.
 EXPOSE 8080
 
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "8080"]
