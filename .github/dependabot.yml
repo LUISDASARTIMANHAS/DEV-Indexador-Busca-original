@@ -4,8 +4,22 @@
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
 version: 2
+version: 2
 updates:
-  - package-ecosystem: "" # See documentation for possible values
-    directory: "/" # Location of package manifests
+# interface-web usa npm
+  # Enable version updates for npm
+  - package-ecosystem: "npm"
+    # Look for `package.json` and `lock` files in the `root` directory
+    directory: "/interface-web"
+    # Check the npm registry for updates every day (weekdays)
+    schedule:
+      interval: "daily"
+
+# backend usa pip
+  # Enable version updates for pip
+  - package-ecosystem: "pip"
+    # Look for a `requirements.txt` in the `root` directory
+    directory: "/backend"
+    # Check for updates once a week
     schedule:
       interval: "weekly"
