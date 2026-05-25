@@ -39,6 +39,7 @@ class MetricsSnapshotResponse(BaseModel):
     overview: MetricsOverviewResponse
     queriesByDay: list[MetricsPointResponse]
     topTerms: list[NamedValueResponse]
+    topQueries: list[NamedValueResponse]
     documentsByCategory: list[NamedValueResponse]
     queryOutcomeDistribution: list[NamedValueResponse]
     recentCalculations: list[MetricCalculationResponse]
