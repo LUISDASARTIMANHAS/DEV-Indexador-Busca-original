@@ -47,12 +47,23 @@ backend/app/
 ├── main.py              # Bootstrap da aplicação FastAPI
 ├── api/v1/              # Rotas HTTP versionadas
 │   ├── router.py        # Agregador de rotas da v1
-│   └── *_routes.py      # Um arquivo por domínio
+│   ├── auth_routes.py
+│   ├── user_routes.py
+│   ├── document_routes.py
+│   ├── ingestion_routes.py
+│   ├── index_routes.py
+│   ├── search_routes.py
+│   ├── metrics_routes.py
+│   ├── history_routes.py
+│   ├── notification_routes.py
+│   ├── settings_routes.py
+│   └── __init__.py
 ├── core/
 │   ├── config.py        # Settings via pydantic-settings
 │   ├── database.py      # Engine, SessionLocal, Base, get_db()
 │   ├── security.py      # Hash bcrypt, criação e decodificação JWT
-│   └── dependencies.py  # get_current_user (Bearer → JWT → ORM)
+│   ├── dependencies.py  # get_current_user (Bearer → JWT → ORM)
+│   └── logging.py       # Configuração de logging e formatadores
 ├── domain/              # Modelos SQLAlchemy (mapeamento ORM)
 ├── repositories/        # Acesso a dados via ORM
 ├── services/            # Regras de negócio e casos de uso
@@ -63,6 +74,8 @@ backend/app/
 ├── exceptions/          # Exceções de domínio específicas
 └── utils/               # Helpers reutilizáveis
 ```
+
+> Nota: o `backend/app/main.py` atual inicializa o schema do banco via `Base.metadata.create_all(bind=engine)` no startup, embora a arquitetura planejada prefira migrações Alembic para controle de versão do banco.
 
 ### Fluxo obrigatório de uma requisição
 
@@ -373,10 +386,14 @@ Ao receber uma tarefa de implementação, consulte esta lista para entender o co
 | `backend/app/core/database.py`               | Engine, sessão e Base do ORM                     |
 | `backend/app/core/security.py`               | JWT e bcrypt                                     |
 | `backend/app/core/dependencies.py`           | Dependência `get_current_user`                   |
+| `backend/app/core/logging.py`                | Configuração de logging                          |
 | `backend/app/domain/user.py`                 | Modelo ORM de referência                         |
 | `backend/app/repositories/user_repository.py`| Repository de referência                         |
 | `backend/app/services/auth_service.py`       | Service de referência                            |
 | `backend/app/schemas/auth_schema.py`         | Schema Pydantic de referência                    |
 | `backend/app/api/v1/auth_routes.py`          | Route de referência                              |
-| `backend/pipeline_indexador/`                | Protótipo funcional do indexador                 |
-| `backend/pipeline_busca/`                    | Protótipo funcional da busca                     |
+| `backend/app/api/v1/router.py`               | Agregador de rotas da v1                         |
+| `backend/app/main.py`                        | Bootstrap FastAPI e inicialização das tabelas    |
+| `backend/app/core/logging.py`                | Configuração de logging                          |
+| `backend/pipeline_indexador/app.py`          | Protótipo funcional do indexador                 |
+| `backend/pipeline_busca/src/search_app.py`   | Protótipo funcional da busca                     |
