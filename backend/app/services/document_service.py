@@ -4,21 +4,18 @@ import json
 import hashlib
 import re
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from mimetypes import guess_type
-from os import cpu_count
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
-from app.core.database import SessionLocal
-
 from app.adapters.document_adapter_registry import document_adapter_registry
 from app.core.config import settings
 from app.domain.document import Document
+from app.domain.document_access_history import DocumentAccessHistory
 from app.domain.document_category import DocumentCategory
 from app.domain.document_history import DocumentHistory
 from app.domain.document_metadata import DocumentMetadata
@@ -72,11 +69,14 @@ class DocumentService:
         document_type: str | None = None,
     ) -> dict:
         started_at = time.perf_counter()
+        normalized_category = category.strip()
 
         try:
             extension = self._extract_extension(filename)
             self._validate_extension(extension)
             adapter = self.adapter_registry.get(extension)
+            if not normalized_category:
+                raise DocumentValidationException("Informe uma categoria válida para o documento.")
             self._validate_size(content)
             adapter.validate_integrity(content)
             extracted_content = adapter.extract_text(content)
@@ -112,7 +112,7 @@ class DocumentService:
             max_length=255,
         )
         file_hash = hashlib.sha256(content).hexdigest()
-        category_row = self._get_or_create_category(db, category.strip())
+        category_row = self._get_or_create_category(db, normalized_category)
         processing_status = self._get_or_create_status(db, "processando")
 
         document = Document(
@@ -143,6 +143,10 @@ class DocumentService:
             cod_usuario=uploaded_by.cod_usuario,
             numero_versao=1,
             caminho_arquivo=str(storage_path),
+            nome_arquivo_original=original_file_name,
+            mime_type=mime_type,
+            tamanho_bytes=len(content),
+            hash_arquivo=file_hash,
             texto_extraido=extracted_content,
             texto_processado=extracted_content,
             versao_ativa=True,
@@ -178,7 +182,7 @@ class DocumentService:
             ingestion_history.tempo_processamento_ms = int(
                 (time.perf_counter() - started_at) * 1000
             )
-            db.rollback()
+            db.commit()
             raise
 
         ingestion_history.tempo_processamento_ms = int((time.perf_counter() - started_at) * 1000)
@@ -220,33 +224,6 @@ class DocumentService:
             document_type=document_type,
         )
 
-    def _upload_document_with_new_session(
-        self,
-        file_payload: dict,
-        *,
-        category: str,
-        uploaded_by: User,
-        document_date: date | None = None,
-        author: str | None = None,
-        document_type: str | None = None,
-    ) -> dict:
-        db = SessionLocal()
-        try:
-            return self._upload_document_internal(
-                db,
-                content=file_payload["content"],
-                filename=file_payload["filename"],
-                content_type=file_payload["content_type"],
-                category=category,
-                uploaded_by=uploaded_by,
-                document_date=document_date,
-                title=file_payload.get("title"),
-                author=author,
-                document_type=document_type,
-            )
-        finally:
-            db.close()
-
     def update_document(
         self,
         db: Session,
@@ -281,6 +258,22 @@ class DocumentService:
         storage_path = self._store_file(content, extension)
         file_hash = hashlib.sha256(content).hexdigest()
         new_version_number = self._get_next_version_number(db, document_id)
+        current_history = (
+            db.query(DocumentHistory)
+            .filter(
+                DocumentHistory.cod_documento == document_id,
+                DocumentHistory.versao_ativa.is_(True),
+            )
+            .first()
+        )
+        if current_history is not None:
+            self._fill_version_file_metadata(
+                current_history,
+                file_name=metadata.nome_arquivo_original,
+                mime_type=metadata.mime_type,
+                size_bytes=metadata.tamanho_bytes,
+                file_hash=metadata.hash_arquivo,
+            )
 
         if category and category.strip():
             category_row = self._get_or_create_category(db, category.strip())
@@ -327,6 +320,10 @@ class DocumentService:
             cod_usuario=updated_by.cod_usuario,
             numero_versao=new_version_number,
             caminho_arquivo=str(storage_path),
+            nome_arquivo_original=metadata.nome_arquivo_original,
+            mime_type=metadata.mime_type,
+            tamanho_bytes=metadata.tamanho_bytes,
+            hash_arquivo=metadata.hash_arquivo,
             texto_extraido=extracted_content,
             texto_processado=extracted_content,
             versao_ativa=True,
@@ -395,7 +392,8 @@ class DocumentService:
         history_ids = [history.cod_historico_documento for history in histories]
         file_paths = self._collect_document_file_paths(histories)
 
-        self._delete_stored_files(file_paths)
+        document.ativo = False
+        db.flush()
         index_service.remove_document_from_index(db, document_id=document_id)
 
         if history_ids:
@@ -406,6 +404,9 @@ class DocumentService:
         db.query(IngestionHistory).filter(
             IngestionHistory.cod_documento == document_id
         ).delete(synchronize_session=False)
+        db.query(DocumentAccessHistory).filter(
+            DocumentAccessHistory.cod_documento == document_id
+        ).delete(synchronize_session=False)
         db.query(DocumentMetadata).filter(
             DocumentMetadata.cod_documento == document_id
         ).delete(synchronize_session=False)
@@ -415,6 +416,8 @@ class DocumentService:
         db.query(Document).filter(
             Document.cod_documento == document_id
         ).delete(synchronize_session=False)
+        db.flush()
+        self._delete_stored_files(file_paths)
         db.commit()
 
         administrative_history_service.log_action(
@@ -464,6 +467,20 @@ class DocumentService:
         )
         if not target_version:
             raise DocumentNotFoundException("Versão não encontrada.")
+
+        target_payload = self.get_document_payload(
+            db,
+            document_id,
+            active_only=False,
+            version_number=version_number,
+        )
+        self._fill_version_file_metadata(
+            target_version,
+            file_name=target_payload["file_name"],
+            mime_type=target_payload["mime_type"],
+            size_bytes=target_payload["size_bytes"],
+            file_hash=target_payload["file_hash"],
+        )
 
         db.query(DocumentHistory).filter(
             DocumentHistory.cod_documento == document_id,
@@ -520,66 +537,59 @@ class DocumentService:
                     }
                 )
 
-        if payloads:
-            max_workers = min(4, cpu_count() or 1, len(payloads))
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                future_to_payload = {
-                    executor.submit(
-                        self._upload_document_with_new_session,
-                        payload,
-                        category=category,
-                        uploaded_by=uploaded_by,
-                        document_date=document_date,
-                        author=author,
-                        document_type=document_type,
-                    ): payload
-                    for payload in payloads
-                }
-
-                for future in as_completed(future_to_payload):
-                    payload = future_to_payload[future]
-                    filename = payload.get("filename") or "arquivo-sem-nome"
-                    try:
-                        document_payload = future.result()
-                        items.append(
-                            {
-                                "fileName": document_payload["file_name"],
-                                "status": "indexed",
-                                "message": "Documento validado, extraído e armazenado com sucesso.",
-                                "documentId": document_payload["id"],
-                                "extractedCharacters": len(document_payload["content"] or ""),
-                                "sizeLabel": self._format_size(document_payload["size_bytes"]),
-                            }
-                        )
-                        success_count += 1
-                    except DocumentValidationException as exc:
-                        items.append(
-                            {
-                                "fileName": filename,
-                                "status": "error",
-                                "message": exc.detail,
-                                "documentId": None,
-                                "extractedCharacters": 0,
-                                "sizeLabel": None,
-                            }
-                        )
-                    except Exception:
-                        self._register_invalid_document(
-                            db,
-                            uploaded_by,
-                            filename,
-                            "Falha inesperada no processamento em lote.",
-                        )
-                        items.append(
-                            {
-                                "fileName": filename,
-                                "status": "error",
-                                "message": "Falha inesperada no processamento do arquivo.",
-                                "documentId": None,
-                                "extractedCharacters": 0,
-                                "sizeLabel": None,
-                            }
-                        )
+        for payload in payloads:
+            filename = payload.get("filename") or "arquivo-sem-nome"
+            try:
+                document_payload = self._upload_document_internal(
+                    db,
+                    content=payload["content"],
+                    filename=payload["filename"],
+                    content_type=payload["content_type"],
+                    category=category,
+                    uploaded_by=uploaded_by,
+                    document_date=document_date,
+                    author=author,
+                    document_type=document_type,
+                )
+                items.append(
+                    {
+                        "fileName": document_payload["file_name"],
+                        "status": "indexed",
+                        "message": "Documento validado, extraído e armazenado com sucesso.",
+                        "documentId": document_payload["id"],
+                        "extractedCharacters": len(document_payload["content"] or ""),
+                        "sizeLabel": self._format_size(document_payload["size_bytes"]),
+                    }
+                )
+                success_count += 1
+            except DocumentValidationException as exc:
+                items.append(
+                    {
+                        "fileName": filename,
+                        "status": "error",
+                        "message": exc.detail,
+                        "documentId": None,
+                        "extractedCharacters": 0,
+                        "sizeLabel": None,
+                    }
+                )
+            except Exception:
+                self._register_invalid_document(
+                    db,
+                    uploaded_by,
+                    filename,
+                    "Falha inesperada no processamento em lote.",
+                )
+                items.append(
+                    {
+                        "fileName": filename,
+                        "status": "error",
+                        "message": "Falha inesperada no processamento do arquivo.",
+                        "documentId": None,
+                        "extractedCharacters": 0,
+                        "sizeLabel": None,
+                    }
+                )
 
         total_files = len(files)
         if total_files > 0:
@@ -607,18 +617,32 @@ class DocumentService:
         document_id: int,
         *,
         active_only: bool = True,
+        version_number: int | None = None,
     ) -> dict:
         payload = self.document_repository.get_document_payload(
             db,
             document_id,
             active_only=active_only,
+            version_number=version_number,
         )
         if payload is None:
+            if version_number is not None:
+                raise DocumentNotFoundException("Versão não encontrada.")
             raise DocumentNotFoundException()
         return payload
 
-    def get_document_file(self, db: Session, document_id: int) -> tuple[Path, str, str]:
-        payload = self.get_document_payload(db, document_id)
+    def get_document_file(
+        self,
+        db: Session,
+        document_id: int,
+        *,
+        version_number: int | None = None,
+    ) -> tuple[Path, str, str]:
+        payload = self.get_document_payload(
+            db,
+            document_id,
+            version_number=version_number,
+        )
         file_path = Path(payload["file_path"])
         if not file_path.exists() or not file_path.is_file():
             raise DocumentNotFoundException("Arquivo físico do documento não encontrado.")
@@ -627,8 +651,19 @@ class DocumentService:
         media_type = payload["mime_type"] or guess_type(file_name)[0] or self._get_mime_type(payload["type"].lower())
         return file_path, file_name, media_type
 
-    def export_document(self, db: Session, *, document_id: int, export_format: str) -> tuple[str, str, str]:
-        payload = self.get_document_payload(db, document_id)
+    def export_document(
+        self,
+        db: Session,
+        *,
+        document_id: int,
+        export_format: str,
+        version_number: int | None = None,
+    ) -> tuple[str, str, str]:
+        payload = self.get_document_payload(
+            db,
+            document_id,
+            version_number=version_number,
+        )
         display_title = self._build_display_title(payload["title"], payload["file_name"])
         formatted_content = self._format_content_for_reading(payload["content"])
         preview_content = formatted_content or "Pré-visualização indisponível para este formato."
@@ -636,7 +671,10 @@ class DocumentService:
 
         if export_format == "json":
             content = json.dumps(
-                self.to_details_response(payload),
+                self.to_details_response(
+                    payload,
+                    version_specific=version_number is not None,
+                ),
                 ensure_ascii=False,
                 indent=2,
             )
@@ -725,7 +763,7 @@ class DocumentService:
             "status": status,
         }
 
-    def to_details_response(self, payload: dict) -> dict:
+    def to_details_response(self, payload: dict, *, version_specific: bool = False) -> dict:
         document_date = (
             payload["document_date"].isoformat()
             if payload["document_date"]
@@ -738,8 +776,13 @@ class DocumentService:
         display_title = self._build_display_title(payload["title"], payload["file_name"])
         extracted_characters = len(raw_content)
         file_path = Path(payload["file_path"])
+        download_path = (
+            f"/api/v1/documents/{payload['id']}/versions/{int(payload['version'])}/download"
+            if version_specific
+            else f"/api/v1/documents/{payload['id']}/download"
+        )
         download_url = (
-            f"/api/v1/documents/{payload['id']}/download"
+            download_path
             if file_path.exists() and file_path.is_file()
             else None
         )
@@ -866,6 +909,24 @@ class DocumentService:
         )
         return int(last_version.numero_versao if last_version else 0) + 1
 
+    @staticmethod
+    def _fill_version_file_metadata(
+        history: DocumentHistory,
+        *,
+        file_name: str,
+        mime_type: str | None,
+        size_bytes: int,
+        file_hash: str,
+    ) -> None:
+        if not history.nome_arquivo_original:
+            history.nome_arquivo_original = file_name
+        if not history.mime_type:
+            history.mime_type = mime_type
+        if history.tamanho_bytes is None:
+            history.tamanho_bytes = size_bytes
+        if not history.hash_arquivo:
+            history.hash_arquivo = file_hash
+
     def _register_invalid_document(
         self, db: Session, uploaded_by: User, filename: str, reason: str
     ) -> None:
@@ -960,9 +1021,6 @@ class DocumentService:
             if current_resolved == storage_root.parent or storage_root not in current_resolved.parents and current_resolved != storage_root:
                 break
             if current_resolved == storage_root:
-                if any(current.iterdir()):
-                    break
-                current.rmdir()
                 break
             if any(current.iterdir()):
                 break

@@ -222,6 +222,15 @@ def test_index_persists_and_supports_incremental_updates_between_sessions(tmp_pa
         assert second_snapshot["integrityOk"] is True
         assert second_snapshot["consistency"]["documentsWithoutIndex"] == 0
         assert second_snapshot["consistency"]["orphanIndexEntries"] == 0
+
+        rebuild = index_service.reindex_all_documents(db, triggered_by=persisted_user)
+        assert rebuild["processedDocuments"] == 2
+        assert rebuild["successCount"] == 2
+        assert rebuild["failureCount"] == 0
+
+        rebuilt_snapshot = index_service.get_status_snapshot(db)
+        assert rebuilt_snapshot["integrityOk"] is True
+        assert rebuilt_snapshot["consistency"]["staleTerms"] == 0
     finally:
         document_service.storage_dir = original_storage_dir
         if db is not None:

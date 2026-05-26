@@ -1,3 +1,5 @@
+import hashlib
+from mimetypes import guess_type
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -13,7 +15,16 @@ from app.domain.user import User
 
 class DocumentRepository:
     @staticmethod
-    def _active_history_query(db: Session, *, active_only: bool = True):
+    def _history_query(
+        db: Session,
+        *,
+        active_only: bool = True,
+        version_number: int | None = None,
+    ):
+        history_join = DocumentHistory.cod_documento == Document.cod_documento
+        if version_number is None:
+            history_join = history_join & DocumentHistory.versao_ativa.is_(True)
+
         query = (
             db.query(
                 Document.cod_documento.label("id"),
@@ -23,7 +34,12 @@ class DocumentRepository:
                 Document.criado_em.label("uploaded_at"),
                 DocumentCategory.nome_categoria.label("category"),
                 DocumentHistory.numero_versao.label("version"),
+                DocumentHistory.versao_ativa.label("active_version"),
                 DocumentHistory.caminho_arquivo.label("file_path"),
+                DocumentHistory.nome_arquivo_original.label("history_file_name"),
+                DocumentHistory.mime_type.label("history_mime_type"),
+                DocumentHistory.tamanho_bytes.label("history_size_bytes"),
+                DocumentHistory.hash_arquivo.label("history_file_hash"),
                 DocumentHistory.texto_extraido.label("content"),
                 DocumentMetadata.autor.label("document_author"),
                 DocumentMetadata.tipo_documento.label("document_type"),
@@ -37,8 +53,7 @@ class DocumentRepository:
             .join(DocumentCategory, DocumentCategory.cod_categoria == Document.cod_categoria)
             .join(
                 DocumentHistory,
-                (DocumentHistory.cod_documento == Document.cod_documento)
-                & (DocumentHistory.versao_ativa.is_(True)),
+                history_join,
             )
             .join(User, User.cod_usuario == Document.cod_usuario_criador)
             .outerjoin(DocumentMetadata, DocumentMetadata.cod_documento == Document.cod_documento)
@@ -47,6 +62,8 @@ class DocumentRepository:
         )
         if active_only:
             query = query.filter(Document.ativo.is_(True))
+        if version_number is not None:
+            query = query.filter(DocumentHistory.numero_versao == version_number)
         return query
 
     @classmethod
@@ -56,9 +73,14 @@ class DocumentRepository:
         document_id: int,
         *,
         active_only: bool = True,
+        version_number: int | None = None,
     ) -> dict | None:
         row = (
-            cls._active_history_query(db, active_only=active_only)
+            cls._history_query(
+                db,
+                active_only=active_only,
+                version_number=version_number,
+            )
             .filter(Document.cod_documento == document_id)
             .order_by(IngestionHistory.criado_em.desc(), DocumentHistory.numero_versao.desc())
             .first()
@@ -68,7 +90,7 @@ class DocumentRepository:
     @classmethod
     def list_ingestion_history(cls, db: Session, limit: int = 20) -> list[dict]:
         rows = (
-            cls._active_history_query(db, active_only=False)
+            cls._history_query(db, active_only=False)
             .order_by(IngestionHistory.criado_em.desc(), Document.cod_documento.desc())
             .limit(limit)
             .all()
@@ -78,7 +100,7 @@ class DocumentRepository:
     @classmethod
     def list_batch_files(cls, db: Session, limit: int = 10) -> list[dict]:
         rows = (
-            cls._active_history_query(db, active_only=False)
+            cls._history_query(db, active_only=False)
             .order_by(IngestionHistory.criado_em.desc(), Document.cod_documento.desc())
             .limit(limit)
             .all()
@@ -88,11 +110,29 @@ class DocumentRepository:
     @staticmethod
     def _row_to_payload(row) -> dict:
         fallback_file_name = f"{row.title}.{str(row.type).lower()}"
-        file_name = row.original_file_name or fallback_file_name
         file_path = Path(row.file_path)
-        size_bytes = row.size_bytes
+        is_active_version = bool(row.active_version)
+        file_name = row.history_file_name
+        if not file_name and is_active_version:
+            file_name = row.original_file_name or fallback_file_name
+        if not file_name:
+            file_name = f"documento-{row.id}-v{int(row.version)}{file_path.suffix}"
+
+        size_bytes = row.history_size_bytes
+        if size_bytes is None and is_active_version:
+            size_bytes = row.size_bytes
         if size_bytes is None:
             size_bytes = file_path.stat().st_size if file_path.exists() else 0
+        mime_type = row.history_mime_type
+        if not mime_type and is_active_version:
+            mime_type = row.mime_type
+        if not mime_type:
+            mime_type = guess_type(file_name)[0]
+        file_hash = row.history_file_hash
+        if not file_hash and is_active_version:
+            file_hash = row.file_hash
+        if not file_hash and file_path.exists() and file_path.is_file():
+            file_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
         return {
             "id": row.id,
             "title": row.title,
@@ -105,8 +145,8 @@ class DocumentRepository:
             "file_path": row.file_path,
             "file_name": file_name,
             "original_file_name": file_name,
-            "mime_type": row.mime_type,
-            "file_hash": row.file_hash or "",
+            "mime_type": mime_type,
+            "file_hash": file_hash or "",
             "content": row.content,
             "ingestion_status": row.ingestion_status or "concluido",
             "author_name": row.document_author or row.uploader_name,

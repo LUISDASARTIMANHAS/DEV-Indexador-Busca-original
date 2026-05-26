@@ -250,6 +250,41 @@ def test_document_versioning_soft_delete_and_restore_keep_index_consistent(tmp_p
         assert versions_payload[0]["active"] is True
         assert versions_payload[1]["active"] is False
 
+        historical_details = client.get(
+            f"/api/v1/documents/{document_id}/versions/1",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert historical_details.status_code == 200
+        assert historical_details.json()["version"] == 1
+        assert historical_details.json()["fileName"] == "portaria.txt"
+        assert "legado original" in historical_details.json()["content"]
+        assert historical_details.json()["downloadUrl"].endswith("/versions/1/download")
+
+        historical_download = client.get(
+            f"/api/v1/documents/{document_id}/versions/1/download",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert historical_download.status_code == 200
+        assert historical_download.content == b"conteudo legado original ifes"
+
+        historical_export = client.get(
+            f"/api/v1/documents/{document_id}/versions/1/export",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"format": "json"},
+        )
+        assert historical_export.status_code == 200
+        assert historical_export.json()["version"] == 1
+
+        active_details = client.get(
+            f"/api/v1/documents/{document_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert active_details.status_code == 200
+        assert active_details.json()["version"] == 2
+        assert active_details.json()["fileName"] == "portaria-v2.txt"
+        assert historical_details.json()["hash"] != active_details.json()["hash"]
+        assert "atualizado revisado" in active_details.json()["content"]
+
         old_search = _search(client, token, "legado original")
         assert old_search["total"] == 0
 
@@ -300,6 +335,7 @@ def test_document_versioning_soft_delete_and_restore_keep_index_consistent(tmp_p
         restored_search = _search(client, token, "legado original")
         assert restored_search["total"] == 1
         assert restored_search["items"][0]["id"] == document_id
+        assert restored_search["items"][0]["fileName"] == "portaria.txt"
 
         status_after_restore = client.get(
             "/api/v1/index/status",

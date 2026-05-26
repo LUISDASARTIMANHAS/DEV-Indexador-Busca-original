@@ -1,6 +1,8 @@
-from datetime import date, datetime, time as dt_time
+import html
 import math
+import re
 import time
+from datetime import date, datetime, time as dt_time
 
 from sqlalchemy.orm import Session
 
@@ -13,6 +15,9 @@ from app.utils.text_processing import normalize_text, preprocess_for_indexing
 
 
 class SearchService:
+    SNIPPET_MAX_LENGTH = 240
+    SNIPPET_CONTEXT_BEFORE_MATCH = 72
+
     def __init__(self, repository: SearchRepository):
         self.repository = repository
         self.document_repository = DocumentRepository()
@@ -230,23 +235,72 @@ class SearchService:
         }
 
     def _build_snippet(self, content: str, matched_terms: list[str]) -> str:
-        snippet = (content or "").strip().replace("\n", " ")
-        snippet = snippet[:240]
-        for term in matched_terms:
-            snippet = snippet.replace(term, f"<mark>{term}</mark>")
-            snippet = snippet.replace(term.capitalize(), f"<mark>{term.capitalize()}</mark>")
-        return snippet
+        text = re.sub(r"\s+", " ", content or "").strip()
+        if not text:
+            return ""
+
+        spans = self._highlight_spans(text, matched_terms)
+        start = 0
+        if spans:
+            start = max(spans[0][0] - self.SNIPPET_CONTEXT_BEFORE_MATCH, 0)
+            if start > 0:
+                word_boundary = text.find(" ", start, spans[0][0])
+                if word_boundary >= 0:
+                    start = word_boundary + 1
+
+        end = min(start + self.SNIPPET_MAX_LENGTH, len(text))
+        if end < len(text):
+            word_boundary = text.rfind(" ", start, end)
+            if word_boundary > start:
+                end = word_boundary
+
+        excerpt_spans = [
+            (span_start - start, span_end - start)
+            for span_start, span_end in spans
+            if span_start >= start and span_end <= end
+        ]
+        excerpt = text[start:end]
+        highlighted = self._escape_and_mark(excerpt, excerpt_spans)
+        prefix = "... " if start > 0 else ""
+        suffix = " ..." if end < len(text) else ""
+        return f"{prefix}{highlighted}{suffix}"
 
     def _searchable_result_text(self, payload: dict) -> str:
         values = [
+            payload.get("content"),
             payload.get("title"),
             payload.get("author_name"),
             payload.get("category"),
             payload.get("document_type"),
             payload.get("file_name"),
-            payload.get("content"),
         ]
         return "\n".join(str(value) for value in values if value)
+
+    def _highlight_spans(self, text: str, matched_terms: list[str]) -> list[tuple[int, int]]:
+        normalized_terms = {
+            normalize_text(term)
+            for term in matched_terms
+            if normalize_text(term)
+        }
+        if not normalized_terms:
+            return []
+
+        spans: list[tuple[int, int]] = []
+        for match in re.finditer(r"\w+", text, flags=re.UNICODE):
+            token = normalize_text(match.group(0))
+            if any(token == term or token.startswith(term) for term in normalized_terms):
+                spans.append(match.span())
+        return spans
+
+    def _escape_and_mark(self, text: str, spans: list[tuple[int, int]]) -> str:
+        fragments: list[str] = []
+        position = 0
+        for start, end in spans:
+            fragments.append(html.escape(text[position:start]))
+            fragments.append(f"<mark>{html.escape(text[start:end])}</mark>")
+            position = end
+        fragments.append(html.escape(text[position:]))
+        return "".join(fragments)
 
     def _normalize_relevance(self, score: float, top_score: float) -> int:
         if top_score <= 0:

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   Download,
@@ -13,14 +14,17 @@ import {
   ChevronLeft,
   ChevronRight,
   FileJson,
+  History,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { documentService } from "@/lib/api/services";
 import { PageError, PageLoader } from "@/components/PageState";
-import { useDocument } from "@/hooks/use-app-query";
+import { useDocument, useDocumentVersions } from "@/hooks/use-app-query";
 
 type DocumentNavigationState = {
   resultIds?: number[];
@@ -50,12 +54,18 @@ const DocumentViewPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { id } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
   const { isAdmin } = useAuth();
+  const queryClient = useQueryClient();
   const [reindexing, setReindexing] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [exporting, setExporting] = useState<string | null>(null);
   const documentId = Number(id);
-  const { data: document, isLoading, isError, refetch } = useDocument(documentId);
+  const versionParam = Number(searchParams.get("version"));
+  const selectedVersion = Number.isInteger(versionParam) && versionParam > 0 ? versionParam : undefined;
+  const { data: document, isLoading, isError, refetch } = useDocument(documentId, selectedVersion);
+  const versionsQuery = useDocumentVersions(documentId);
   const navigationState = (location.state || {}) as DocumentNavigationState;
   const resultIds = navigationState.resultIds || [];
   const currentResultIndex = resultIds.indexOf(documentId);
@@ -63,6 +73,8 @@ const DocumentViewPage = () => {
   const nextDocumentId = currentResultIndex >= 0 && currentResultIndex < resultIds.length - 1
     ? resultIds[currentResultIndex + 1]
     : null;
+  const activeVersion = versionsQuery.data?.find((version) => version.active)?.version;
+  const isHistoricalVersion = activeVersion !== undefined && document?.version !== activeVersion;
 
   const handleReindex = async () => {
     setReindexing(true);
@@ -96,7 +108,7 @@ const DocumentViewPage = () => {
 
     setExporting("download");
     try {
-      const { blob, filename } = await documentService.download(documentId);
+      const { blob, filename } = await documentService.download(documentId, selectedVersion);
       saveBlob(blob, filename || `${document.title}.${document.type.toLowerCase()}`);
     } catch {
       toast({
@@ -112,7 +124,7 @@ const DocumentViewPage = () => {
   const handleExport = async (format: "txt" | "json") => {
     setExporting(format);
     try {
-      const { blob, filename } = await documentService.export(documentId, format);
+      const { blob, filename } = await documentService.export(documentId, format, selectedVersion);
       saveBlob(blob, filename || `${document?.title || "documento"}.${format}`);
     } catch {
       toast({
@@ -123,6 +135,42 @@ const DocumentViewPage = () => {
     } finally {
       setExporting(null);
     }
+  };
+
+  const handleRestore = async () => {
+    if (!document || !isHistoricalVersion) {
+      return;
+    }
+
+    setRestoring(true);
+    try {
+      await documentService.restoreVersion(documentId, document.version);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["document", documentId] }),
+        queryClient.invalidateQueries({ queryKey: ["document-versions", documentId] }),
+        queryClient.invalidateQueries({ queryKey: ["search-results"] }),
+        versionsQuery.refetch(),
+        refetch(),
+      ]);
+      toast({
+        title: "Versão ativa atualizada",
+        description: `A versão ${document.version} foi restaurada e reindexada.`,
+      });
+    } catch {
+      toast({
+        title: "Falha na restauração",
+        description: "Não foi possível tornar esta versão ativa.",
+        variant: "destructive",
+      });
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  const selectVersion = (value: string) => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("version", value);
+    setSearchParams(nextParams, { replace: true });
   };
 
   const goToRelatedDocument = (targetId: number | null) => {
@@ -285,12 +333,44 @@ const DocumentViewPage = () => {
 
             <div className="rounded-xl border border-border/70 bg-background/70 p-4">
               <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                <Hash className="h-3.5 w-3.5" />
-                Controle
+                <History className="h-3.5 w-3.5" />
+                Versões
               </div>
-              <div className="space-y-1 text-sm text-foreground">
-                <p>Versão {document.version}</p>
-                <p>{document.extractedCharacters.toLocaleString("pt-BR")} caracteres extraídos</p>
+              <div className="space-y-3 text-sm text-foreground">
+                <Select
+                  value={String(document.version)}
+                  onValueChange={selectVersion}
+                  disabled={versionsQuery.isLoading || !versionsQuery.data?.length}
+                >
+                  <SelectTrigger aria-label="Selecionar versão do documento">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {versionsQuery.data?.map((version) => (
+                      <SelectItem key={version.version} value={String(version.version)}>
+                        Versão {version.version}{version.active ? " (ativa)" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-2">
+                  <Badge variant={isHistoricalVersion ? "outline" : "secondary"}>
+                    {isHistoricalVersion ? "Histórica" : "Ativa"}
+                  </Badge>
+                  <span>{document.extractedCharacters.toLocaleString("pt-BR")} caracteres</span>
+                </div>
+                {isAdmin && isHistoricalVersion && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full gap-2"
+                    onClick={handleRestore}
+                    disabled={restoring}
+                  >
+                    <RotateCcw className={`h-3.5 w-3.5 ${restoring ? "animate-spin" : ""}`} />
+                    {restoring ? "Restaurando..." : "Tornar ativa"}
+                  </Button>
+                )}
                 {currentResultIndex >= 0 && (
                   <p className="text-muted-foreground">
                     Resultado {currentResultIndex + 1} de {resultIds.length}

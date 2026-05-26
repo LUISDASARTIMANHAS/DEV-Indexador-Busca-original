@@ -32,10 +32,17 @@ export const useSearchHistory = (filters: SearchHistoryFilters) =>
     queryFn: () => searchService.history(filters),
   });
 
-export const useDocument = (id: number) =>
+export const useDocument = (id: number, version?: number) =>
   useQuery({
-    queryKey: ["document", id],
-    queryFn: () => documentService.getById(id),
+    queryKey: ["document", id, version ?? "active"],
+    queryFn: () => documentService.getById(id, version),
+    enabled: Number.isFinite(id),
+  });
+
+export const useDocumentVersions = (id: number) =>
+  useQuery({
+    queryKey: ["document-versions", id],
+    queryFn: () => documentService.versions(id),
     enabled: Number.isFinite(id),
   });
 

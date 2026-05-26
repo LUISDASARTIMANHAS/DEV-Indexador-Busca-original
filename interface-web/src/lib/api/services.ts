@@ -26,6 +26,8 @@ import type {
   BatchUploadResult,
   DocumentDetails,
   DocumentUploadPayload,
+  DocumentVersion,
+  DocumentVersionUploadPayload,
   HistoryEntry,
   IndexStatusSnapshot,
   IngestionBatchFile,
@@ -231,17 +233,93 @@ export const searchService = {
 };
 
 export const documentService = {
-  async getById(id: number): Promise<DocumentDetails> {
+  async getById(id: number, version?: number): Promise<DocumentDetails> {
     if (shouldUseMocks()) {
       await delay();
       const document = mockDocuments.find((item) => item.id === id);
       if (!document) {
         throw new Error("Documento não encontrado.");
       }
-      return document;
+      return version === undefined ? document : { ...document, version };
     }
 
-    return apiRequest<DocumentDetails>(`/api/v1/documents/${id}`);
+    const path = version === undefined
+      ? `/api/v1/documents/${id}`
+      : `/api/v1/documents/${id}/versions/${version}`;
+    return apiRequest<DocumentDetails>(path);
+  },
+
+  async versions(id: number): Promise<DocumentVersion[]> {
+    if (shouldUseMocks()) {
+      await delay(100);
+      const document = mockDocuments.find((item) => item.id === id);
+      if (!document) {
+        throw new Error("Documento não encontrado.");
+      }
+      return Array.from({ length: document.version }, (_, index) => {
+        const version = document.version - index;
+        return {
+          version,
+          createdAt: document.indexedAt,
+          active: version === document.version,
+        };
+      });
+    }
+
+    return apiRequest<DocumentVersion[]>(`/api/v1/documents/${id}/versions`);
+  },
+
+  async createVersion(id: number, payload: DocumentVersionUploadPayload): Promise<DocumentDetails> {
+    if (shouldUseMocks()) {
+      await delay(500);
+      const document = mockDocuments.find((item) => item.id === id);
+      if (!document) {
+        throw new Error("Documento não encontrado.");
+      }
+      return {
+        ...document,
+        title: payload.title || document.title,
+        author: payload.author || document.author,
+        documentType: payload.documentType || document.documentType,
+        category: payload.category || document.category,
+        fileName: payload.file.name,
+        version: document.version + 1,
+      };
+    }
+
+    const formData = new FormData();
+    formData.append("file", payload.file);
+    if (payload.category) {
+      formData.append("category", payload.category);
+    }
+    if (payload.documentDate) {
+      formData.append("document_date", payload.documentDate);
+    }
+    if (payload.title) {
+      formData.append("title", payload.title);
+    }
+    if (payload.author) {
+      formData.append("author", payload.author);
+    }
+    if (payload.documentType) {
+      formData.append("document_type", payload.documentType);
+    }
+
+    return apiRequest<DocumentDetails>(`/api/v1/documents/${id}`, {
+      method: "PUT",
+      body: formData,
+    });
+  },
+
+  async restoreVersion(id: number, version: number): Promise<DocumentDetails> {
+    if (shouldUseMocks()) {
+      await delay(300);
+      return this.getById(id, version);
+    }
+
+    return apiRequest<DocumentDetails>(`/api/v1/documents/${id}/versions/${version}/restore`, {
+      method: "POST",
+    });
   },
 
   async reindex(id: number): Promise<void> {
@@ -255,7 +333,7 @@ export const documentService = {
     });
   },
 
-  async download(id: number): Promise<{ blob: Blob; filename: string | null }> {
+  async download(id: number, version?: number): Promise<{ blob: Blob; filename: string | null }> {
     if (shouldUseMocks()) {
       await delay(150);
       const document = mockDocuments.find((item) => item.id === id);
@@ -265,10 +343,13 @@ export const documentService = {
       };
     }
 
-    return apiBlobRequest(`/api/v1/documents/${id}/download`);
+    const path = version === undefined
+      ? `/api/v1/documents/${id}/download`
+      : `/api/v1/documents/${id}/versions/${version}/download`;
+    return apiBlobRequest(path);
   },
 
-  async export(id: number, format: "txt" | "json"): Promise<{ blob: Blob; filename: string | null }> {
+  async export(id: number, format: "txt" | "json", version?: number): Promise<{ blob: Blob; filename: string | null }> {
     if (shouldUseMocks()) {
       await delay(150);
       const document = mockDocuments.find((item) => item.id === id);
@@ -281,7 +362,10 @@ export const documentService = {
       };
     }
 
-    return apiBlobRequest(`/api/v1/documents/${id}/export`, {
+    const path = version === undefined
+      ? `/api/v1/documents/${id}/export`
+      : `/api/v1/documents/${id}/versions/${version}/export`;
+    return apiBlobRequest(path, {
       query: { format },
     });
   },

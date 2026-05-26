@@ -29,6 +29,10 @@ class InvertedIndexService:
             history.cod_historico_documento,
             len(fields),
         )
+        had_previous_entries = self._history_has_index_entries(
+            db,
+            history_id=history.cod_historico_documento,
+        )
         affected_term_ids = self._remove_previous_index_entries(
             db,
             history_id=history.cod_historico_documento,
@@ -76,14 +80,23 @@ class InvertedIndexService:
 
         history.texto_processado = "\n".join(processed_segments)
         db.flush()
-        self.refresh_term_statistics(db, affected_term_ids)
+        if had_previous_entries:
+            self.refresh_term_statistics(db, affected_term_ids)
+        else:
+            self.refresh_all_term_statistics(db)
 
         return {
             "term_count": total_term_count,
             "token_count": total_token_count,
         }
 
-    def remove_document_terms(self, db: Session, *, document_id: int) -> dict:
+    def remove_document_terms(
+        self,
+        db: Session,
+        *,
+        document_id: int,
+        refresh_statistics: bool = True,
+    ) -> dict:
         existing_field_ids = [
             row.cod_campo_documento
             for row in db.query(DocumentField.cod_campo_documento)
@@ -95,6 +108,8 @@ class InvertedIndexService:
             .all()
         ]
         if not existing_field_ids:
+            if refresh_statistics:
+                self.refresh_all_term_statistics(db)
             logger.info(
                 "Nenhum índice encontrado para remoção do documento %s",
                 document_id,
@@ -127,7 +142,8 @@ class InvertedIndexService:
             .filter(DocumentField.cod_campo_documento.in_(existing_field_ids))
             .delete(synchronize_session=False)
         )
-        self.refresh_term_statistics(db, affected_term_ids)
+        if refresh_statistics:
+            self.refresh_all_term_statistics(db)
         logger.info(
             "Remoção indexada do documento %s concluída: %s postings apagados, %s campos apagados, %s termos afetados",
             document_id,
@@ -231,46 +247,34 @@ class InvertedIndexService:
 
         return affected_term_ids
 
+    def _history_has_index_entries(self, db: Session, *, history_id: int) -> bool:
+        return (
+            db.query(InvertedIndex.cod_indice_invertido)
+            .join(
+                DocumentField,
+                DocumentField.cod_campo_documento == InvertedIndex.cod_campo_documento,
+            )
+            .filter(DocumentField.cod_historico_documento == history_id)
+            .first()
+            is not None
+        )
+
     def _get_or_create_term(self, db: Session, token: str) -> Term:
         term = db.query(Term).filter(Term.texto_termo == token).first()
         if term is not None:
             return term
 
-        term = Term(texto_termo=token, df=0, idf=0)
-        db.add(term)
         try:
-            db.flush()
+            with db.begin_nested():
+                term = Term(texto_termo=token, df=0, idf=0)
+                db.add(term)
+                db.flush()
             return term
         except IntegrityError:
-            # Another thread/process inserted the same term concurrently.
-            # Rollback this session's failed flush and return the existing row.
-            db.rollback()
             existing = db.query(Term).filter(Term.texto_termo == token).first()
             if existing is not None:
                 return existing
-            # If still not found, re-raise to surface the unexpected error.
             raise
-
-    def _refresh_term_statistics(self, db: Session, term_ids: set[int]) -> None:
-        active_document_count = (
-            db.query(func.count(Document.cod_documento))
-            .filter(Document.ativo.is_(True))
-            .scalar()
-            or 0
-        )
-
-        for term_id in term_ids:
-            term = db.query(Term).filter(Term.cod_termo == term_id).first()
-            if term is None:
-                continue
-
-            document_frequency = self._document_frequency(db, term.cod_termo)
-            term.df = document_frequency
-            if document_frequency > 0 and active_document_count > 0:
-                scaled_idf = math.log((active_document_count + 1) / (document_frequency + 1) + 1)
-                term.idf = max(int(round(scaled_idf * 1000)), 1)
-            else:
-                term.idf = 0
 
     def refresh_term_statistics(self, db: Session, term_ids: set[int]) -> int:
         if not term_ids:
@@ -284,14 +288,13 @@ class InvertedIndexService:
         )
 
         terms = db.query(Term).filter(Term.cod_termo.in_(term_ids)).all()
+        frequencies = self._document_frequencies(db, term_ids=term_ids)
         for term in terms:
-            document_frequency = self._document_frequency(db, term.cod_termo)
-            term.df = document_frequency
-            if document_frequency > 0 and active_document_count > 0:
-                scaled_idf = math.log((active_document_count + 1) / (document_frequency + 1) + 1)
-                term.idf = max(int(round(scaled_idf * 1000)), 1)
-            else:
-                term.idf = 0
+            self._apply_statistics(
+                term,
+                active_document_count=active_document_count,
+                document_frequency=frequencies.get(term.cod_termo, 0),
+            )
 
         db.flush()
         logger.info(
@@ -318,14 +321,13 @@ class InvertedIndexService:
         )
 
         terms = db.query(Term).all()
+        frequencies = self._document_frequencies(db)
         for term in terms:
-            document_frequency = self._document_frequency(db, term.cod_termo)
-            term.df = document_frequency
-            if document_frequency > 0 and active_document_count > 0:
-                scaled_idf = math.log((active_document_count + 1) / (document_frequency + 1) + 1)
-                term.idf = max(int(round(scaled_idf * 1000)), 1)
-            else:
-                term.idf = 0
+            self._apply_statistics(
+                term,
+                active_document_count=active_document_count,
+                document_frequency=frequencies.get(term.cod_termo, 0),
+            )
 
         db.flush()
         logger.info(
@@ -334,9 +336,17 @@ class InvertedIndexService:
         )
         return len(terms)
 
-    def _document_frequency(self, db: Session, term_id: int) -> int:
-        return (
-            db.query(func.count(distinct(Document.cod_documento)))
+    def _document_frequencies(
+        self,
+        db: Session,
+        *,
+        term_ids: set[int] | None = None,
+    ) -> dict[int, int]:
+        query = (
+            db.query(
+                InvertedIndex.cod_termo,
+                func.count(distinct(Document.cod_documento)),
+            )
             .select_from(InvertedIndex)
             .join(
                 DocumentField,
@@ -347,12 +357,30 @@ class InvertedIndexService:
                 DocumentHistory.cod_historico_documento == DocumentField.cod_historico_documento,
             )
             .join(Document, Document.cod_documento == DocumentHistory.cod_documento)
-            .filter(InvertedIndex.cod_termo == term_id)
             .filter(Document.ativo.is_(True))
             .filter(DocumentHistory.versao_ativa.is_(True))
-            .scalar()
-            or 0
         )
+        if term_ids is not None:
+            query = query.filter(InvertedIndex.cod_termo.in_(term_ids))
+
+        return {
+            term_id: int(document_frequency)
+            for term_id, document_frequency in query.group_by(InvertedIndex.cod_termo).all()
+        }
+
+    @staticmethod
+    def _apply_statistics(
+        term: Term,
+        *,
+        active_document_count: int,
+        document_frequency: int,
+    ) -> None:
+        term.df = document_frequency
+        if document_frequency > 0 and active_document_count > 0:
+            scaled_idf = math.log((active_document_count + 1) / (document_frequency + 1) + 1)
+            term.idf = max(int(round(scaled_idf * 1000)), 1)
+        else:
+            term.idf = 0
 
 
 inverted_index_service = InvertedIndexService()

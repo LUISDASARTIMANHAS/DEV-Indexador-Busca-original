@@ -1,16 +1,39 @@
-import { useMemo } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, FileText, Calendar, Tag, Eye, Download, SearchX, ChevronLeft, ChevronRight, FileJson, User } from "lucide-react";
+import { ArrowLeft, FileText, Calendar, Tag, Download, SearchX, ChevronLeft, ChevronRight, FileJson, User, ExternalLink, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageError, PageLoader } from "@/components/PageState";
-import { useSearchResults } from "@/hooks/use-app-query";
+import { useDocument, useDocumentVersions, useSearchResults } from "@/hooks/use-app-query";
 import type { SearchResult } from "@/types/app";
 
 const csvEscape = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
 
 const stripHtml = (value: string) => value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+
+export const HighlightedSnippet = ({ value }: { value: string }) => {
+  const content = useMemo<ReactNode[]>(() => {
+    const template = window.document.createElement("template");
+    template.innerHTML = value;
+
+    return Array.from(template.content.childNodes).map((node, index) => {
+      const text = node.textContent || "";
+      if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "MARK") {
+        return (
+          <mark key={index} className="highlight-term bg-transparent">
+            {text}
+          </mark>
+        );
+      }
+      return <span key={index}>{text}</span>;
+    });
+  }, [value]);
+
+  return <>{content}</>;
+};
 
 const formatSortLabel = (value: string) => {
   switch (value) {
@@ -72,6 +95,7 @@ const getPageNumbers = (current: number, total: number) => {
 const ResultsPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [previewSelection, setPreviewSelection] = useState<{ documentId: number; version?: number } | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
   const currentPage = Number(searchParams.get("page") || "1");
@@ -86,6 +110,16 @@ const ResultsPage = () => {
     sortBy: searchParams.get("sortBy") || undefined,
   }), [currentPage, searchParams]);
   const { data, isLoading, isError, refetch } = useSearchResults(query, filters);
+  const {
+    data: previewDocument,
+    isLoading: isPreviewLoading,
+    isError: isPreviewError,
+    refetch: refetchPreview,
+  } = useDocument(previewSelection?.documentId ?? Number.NaN, previewSelection?.version);
+  const {
+    data: previewVersions,
+    isLoading: areVersionsLoading,
+  } = useDocumentVersions(previewSelection?.documentId ?? Number.NaN);
 
   const totalPages = data?.totalPages || 1;
   const hasResults = !!data && data.items.length > 0;
@@ -118,8 +152,9 @@ const ResultsPage = () => {
     );
   };
 
-  const openDocument = (id: number) => {
-    navigate(`/documento/${id}`, {
+  const openDocument = (id: number, version?: number) => {
+    const versionQuery = version === undefined ? "" : `?version=${version}`;
+    navigate(`/documento/${id}${versionQuery}`, {
       state: {
         resultIds: data?.items.map((item) => item.id) || [],
         query,
@@ -206,8 +241,9 @@ const ResultsPage = () => {
                     </div>
                     <p
                       className="text-sm text-muted-foreground line-clamp-2 mb-3 [&_mark]:highlight-term [&_mark]:bg-transparent"
-                      dangerouslySetInnerHTML={{ __html: doc.snippet }}
-                    />
+                    >
+                      <HighlightedSnippet value={doc.snippet} />
+                    </p>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                       <span className="flex items-center gap-1">
                         <Tag className="h-3 w-3" />
@@ -233,15 +269,26 @@ const ResultsPage = () => {
                       </span>
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openDocument(doc.id)}
-                    className="shrink-0 gap-1.5"
-                  >
-                    <Eye className="h-3.5 w-3.5" />
-                    Visualizar
-                  </Button>
+                  <div className="flex shrink-0 flex-col gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPreviewSelection({ documentId: doc.id })}
+                      className="gap-1.5"
+                    >
+                      <History className="h-3.5 w-3.5" />
+                      Versões
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openDocument(doc.id)}
+                      className="gap-1.5"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      Abrir
+                    </Button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -285,6 +332,85 @@ const ResultsPage = () => {
           </div>
         </>
       )}
+      <Dialog
+        open={previewSelection !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPreviewSelection(null);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[85vh] max-w-3xl overflow-hidden p-0">
+          <DialogHeader className="border-b border-border px-6 pb-4 pt-6 pr-12">
+            <DialogTitle>{previewDocument?.displayTitle || previewDocument?.title || "Prévia e versões"}</DialogTitle>
+            <DialogDescription>
+              {previewDocument ? `${previewDocument.documentType} | ${previewDocument.category} | ${previewDocument.author}` : "Carregando conteúdo..."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[58vh] overflow-y-auto px-6 py-4">
+            {isPreviewLoading ? (
+              <p className="py-10 text-center text-sm text-muted-foreground">Carregando prévia...</p>
+            ) : isPreviewError || !previewDocument ? (
+              <div className="flex flex-col items-center gap-3 py-10">
+                <p className="text-sm text-muted-foreground">Não foi possível carregar a prévia.</p>
+                <Button variant="outline" size="sm" onClick={() => refetchPreview()}>
+                  Tentar novamente
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="mb-4 flex flex-wrap items-end justify-between gap-3 border-b border-border pb-4">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="secondary">{previewDocument.category}</Badge>
+                    <Badge variant="outline">{previewDocument.format}</Badge>
+                    <Badge variant="outline">{previewDocument.size}</Badge>
+                    <Badge variant="outline">{new Date(previewDocument.date).toLocaleDateString("pt-BR")}</Badge>
+                  </div>
+                  <div className="min-w-44">
+                    <p className="mb-1 text-xs font-medium text-muted-foreground">Versão exibida</p>
+                    <Select
+                      value={String(previewSelection?.version ?? previewDocument.version)}
+                      disabled={areVersionsLoading || !previewVersions?.length}
+                      onValueChange={(value) => {
+                        if (previewSelection) {
+                          setPreviewSelection({
+                            documentId: previewSelection.documentId,
+                            version: Number(value),
+                          });
+                        }
+                      }}
+                    >
+                      <SelectTrigger aria-label="Versão exibida">
+                        <SelectValue placeholder="Versão" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {previewVersions?.map((item) => (
+                          <SelectItem key={item.version} value={String(item.version)}>
+                            Versão {item.version}{item.active ? " (ativa)" : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">
+                  {previewDocument.formattedContent || previewDocument.content}
+                </p>
+              </>
+            )}
+          </div>
+          <DialogFooter className="border-t border-border px-6 py-4">
+            <Button
+              className="gap-2"
+              disabled={!previewSelection || isPreviewLoading || isPreviewError}
+              onClick={() => previewSelection && openDocument(previewSelection.documentId, previewSelection.version)}
+            >
+              <ExternalLink className="h-4 w-4" />
+              Abrir documento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

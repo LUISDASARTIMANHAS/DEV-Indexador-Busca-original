@@ -108,10 +108,16 @@ export type DocumentDetails = {
   sizeBytes: number;
   size: string;
   hash: string;
-  downloadUrl?: string;
+  downloadUrl?: string | null;
   content: string;
   formattedContent?: string;
   extractedCharacters: number;
+};
+
+export type DocumentVersion = {
+  version: number;
+  createdAt: string;
+  active: boolean;
 };
 
 export type IngestionBatchFile = {
@@ -135,6 +141,10 @@ export type DocumentUploadPayload = {
   title?: string;
   author?: string;
   documentType?: string;
+};
+
+export type DocumentVersionUploadPayload = Omit<DocumentUploadPayload, "category"> & {
+  category?: string;
 };
 
 export type BatchUploadPayload = {

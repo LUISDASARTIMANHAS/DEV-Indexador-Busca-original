@@ -114,6 +114,19 @@ def test_upload_document_rejects_invalid_extension(client: TestClient):
     assert response.json()["message"] == "Tipo de arquivo inválido. Formatos aceitos: CSV, DOCX, PDF, TXT."
 
 
+def test_upload_document_rejects_empty_category(client: TestClient):
+    token = login(client)
+    response = client.post(
+        "/api/v1/ingestion/upload",
+        headers={"Authorization": f"Bearer {token}"},
+        files={"file": ("sem-categoria.txt", b"conteudo valido", "text/plain")},
+        data={"category": "   "},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["message"] == "Informe uma categoria válida para o documento."
+
+
 def test_ingestion_history_lists_uploaded_document(client: TestClient):
     token = login(client)
     upload_response = client.post(

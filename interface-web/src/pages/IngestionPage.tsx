@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Upload, FileText, CheckCircle2, X, ArrowRight } from "lucide-react";
+import { Upload, FileText, CheckCircle2, X, ArrowRight, FilePlus2, History, Search } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,8 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { PageError, PageLoader } from "@/components/PageState";
 import { useIngestionBatch, useIngestionHistory } from "@/hooks/use-app-query";
-import { ingestionService } from "@/lib/api/services";
-import type { BatchUploadResult, UploadedDocument } from "@/types/app";
+import { documentService, ingestionService, searchService } from "@/lib/api/services";
+import type { BatchUploadResult, DocumentDetails, SearchResult, UploadedDocument } from "@/types/app";
 
 const statusMap = {
   validated: { label: "Validado", variant: "secondary" as const, color: "text-info" },
@@ -31,6 +31,10 @@ const IngestionPage = () => {
   const [dragOver, setDragOver] = useState(false);
   const [batchDragOver, setBatchDragOver] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadMode, setUploadMode] = useState<"new" | "version">("new");
+  const [documentLookup, setDocumentLookup] = useState("");
+  const [versionTarget, setVersionTarget] = useState<SearchResult | null>(null);
+  const [versionMatches, setVersionMatches] = useState<SearchResult[]>([]);
   const [batchFiles, setBatchFiles] = useState<File[]>([]);
   const [category, setCategory] = useState("");
   const [batchCategory, setBatchCategory] = useState("");
@@ -41,7 +45,7 @@ const IngestionPage = () => {
   const [documentType, setDocumentType] = useState("");
   const [batchAuthor, setBatchAuthor] = useState("");
   const [batchDocumentType, setBatchDocumentType] = useState("");
-  const [uploadedDocument, setUploadedDocument] = useState<UploadedDocument | null>(null);
+  const [uploadedDocument, setUploadedDocument] = useState<UploadedDocument | DocumentDetails | null>(null);
   const [batchResult, setBatchResult] = useState<BatchUploadResult | null>(null);
   const [step, setStep] = useState<"idle" | "uploading" | "validated" | "done">("idle");
   const { toast } = useToast();
@@ -53,6 +57,8 @@ const IngestionPage = () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["ingestion-batch"] }),
         queryClient.invalidateQueries({ queryKey: ["ingestion-history"] }),
+        queryClient.invalidateQueries({ queryKey: ["search-results"] }),
+        queryClient.invalidateQueries({ queryKey: ["index-status"] }),
       ]);
       toast({
         title: "Documento enviado",
@@ -63,6 +69,57 @@ const IngestionPage = () => {
       setStep("idle");
       toast({
         title: "Falha no upload",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+  const versionLookupMutation = useMutation({
+    mutationFn: (query: string) => searchService.search(query, { limit: 5, page: 1 }),
+    onSuccess: (result) => {
+      setVersionMatches(result.items);
+      if (!result.items.some((item) => item.id === versionTarget?.id)) {
+        setVersionTarget(null);
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Falha ao localizar documento",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+  const createVersionMutation = useMutation({
+    mutationFn: ({ documentId, file }: { documentId: number; file: File }) =>
+      documentService.createVersion(documentId, {
+        file,
+        category: category || undefined,
+        documentDate: documentDate || undefined,
+        title: documentTitle || undefined,
+        author: documentAuthor || undefined,
+        documentType: documentType || undefined,
+      }),
+    onSuccess: async (document) => {
+      setUploadedDocument(document);
+      setStep("done");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["document", document.id] }),
+        queryClient.invalidateQueries({ queryKey: ["document-versions", document.id] }),
+        queryClient.invalidateQueries({ queryKey: ["ingestion-batch"] }),
+        queryClient.invalidateQueries({ queryKey: ["ingestion-history"] }),
+        queryClient.invalidateQueries({ queryKey: ["search-results"] }),
+        queryClient.invalidateQueries({ queryKey: ["index-status"] }),
+      ]);
+      toast({
+        title: "Nova versão indexada",
+        description: `Versão ${document.version} registrada como ativa para ${document.title}.`,
+      });
+    },
+    onError: (error: Error) => {
+      setStep("idle");
+      toast({
+        title: "Falha ao registrar versão",
         description: error.message,
         variant: "destructive",
       });
@@ -105,16 +162,22 @@ const IngestionPage = () => {
   };
 
   const handleSubmitUpload = () => {
-    if (!selectedFile || !category) {
+    if (!selectedFile || (uploadMode === "new" && !category) || (uploadMode === "version" && !versionTarget)) {
       toast({
         title: "Dados incompletos",
-        description: "Selecione um arquivo e informe a categoria antes de enviar.",
+        description: uploadMode === "version"
+          ? "Selecione um arquivo e o documento que receberá a nova versão."
+          : "Selecione um arquivo e informe a categoria antes de enviar.",
         variant: "destructive",
       });
       return;
     }
 
     setStep("uploading");
+    if (uploadMode === "version" && versionTarget) {
+      createVersionMutation.mutate({ documentId: versionTarget.id, file: selectedFile });
+      return;
+    }
     uploadMutation.mutate({
       file: selectedFile,
       category,
@@ -125,6 +188,28 @@ const IngestionPage = () => {
     });
   };
 
+  const setMode = (mode: "new" | "version") => {
+    setUploadMode(mode);
+    setUploadedDocument(null);
+    setStep(selectedFile ? "validated" : "idle");
+    setVersionTarget(null);
+    setVersionMatches([]);
+    setDocumentLookup("");
+  };
+
+  const searchVersionTarget = () => {
+    const query = documentLookup.trim();
+    if (!query) {
+      toast({
+        title: "Informe a busca",
+        description: "Digite o título ou conteúdo do documento original.",
+        variant: "destructive",
+      });
+      return;
+    }
+    versionLookupMutation.mutate(query);
+  };
+
   const resetUpload = () => {
     setSelectedFile(null);
     setUploadedDocument(null);
@@ -133,6 +218,9 @@ const IngestionPage = () => {
     setDocumentTitle("");
     setDocumentAuthor("");
     setDocumentType("");
+    setVersionTarget(null);
+    setVersionMatches([]);
+    setDocumentLookup("");
     setStep("idle");
     if (inputRef.current) {
       inputRef.current.value = "";
@@ -202,6 +290,83 @@ const IngestionPage = () => {
         </TabsList>
 
         <TabsContent value="individual" className="mt-4 space-y-4">
+          <div className="flex w-fit rounded-lg border border-border bg-background p-1">
+            <Button
+              size="sm"
+              variant={uploadMode === "new" ? "default" : "ghost"}
+              className="gap-2"
+              onClick={() => setMode("new")}
+            >
+              <FilePlus2 className="h-4 w-4" />
+              Novo documento
+            </Button>
+            <Button
+              size="sm"
+              variant={uploadMode === "version" ? "default" : "ghost"}
+              className="gap-2"
+              onClick={() => setMode("version")}
+            >
+              <History className="h-4 w-4" />
+              Nova versão
+            </Button>
+          </div>
+
+          {uploadMode === "version" && (
+            <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+              <Label htmlFor="version-document-search">Documento original</Label>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  id="version-document-search"
+                  value={documentLookup}
+                  onChange={(event) => setDocumentLookup(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      searchVersionTarget();
+                    }
+                  }}
+                  placeholder="Título ou termos do documento"
+                />
+                <Button
+                  variant="outline"
+                  className="shrink-0 gap-2"
+                  onClick={searchVersionTarget}
+                  disabled={versionLookupMutation.isPending}
+                >
+                  <Search className="h-4 w-4" />
+                  {versionLookupMutation.isPending ? "Buscando..." : "Buscar"}
+                </Button>
+              </div>
+              {versionMatches.length > 0 && (
+                <div className="space-y-2" aria-label="Documentos encontrados">
+                  {versionMatches.map((document) => (
+                    <button
+                      key={document.id}
+                      type="button"
+                      onClick={() => setVersionTarget(document)}
+                      className={`flex w-full items-start justify-between gap-3 rounded-md border px-3 py-2 text-left text-sm transition-colors ${
+                        versionTarget?.id === document.id
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:bg-muted/50"
+                      }`}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium text-foreground">{document.title}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {document.category} | {document.documentType} | {document.author}
+                        </span>
+                      </span>
+                      {versionTarget?.id === document.id && <Badge>Selecionado</Badge>}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {versionLookupMutation.isSuccess && versionMatches.length === 0 && (
+                <p className="text-sm text-muted-foreground">Nenhum documento encontrado.</p>
+              )}
+            </div>
+          )}
+
           {/* Pipeline steps */}
           <div className="glass-card p-4">
             <div className="flex items-center gap-2 justify-between">
@@ -291,7 +456,7 @@ const IngestionPage = () => {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Categoria</Label>
+              <Label>{uploadMode === "version" ? "Nova categoria (opcional)" : "Categoria"}</Label>
               <Select value={category} onValueChange={setCategory}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>
@@ -309,8 +474,21 @@ const IngestionPage = () => {
           </div>
 
           <div className="flex gap-2">
-            <Button onClick={handleSubmitUpload} disabled={!uploaded || !category || uploadMutation.isPending}>
-              {step === "uploading" ? "Enviando..." : step === "done" ? "Enviar novo documento" : "Validar e enviar"}
+            <Button
+              onClick={handleSubmitUpload}
+              disabled={
+                !uploaded ||
+                (uploadMode === "new" && !category) ||
+                (uploadMode === "version" && !versionTarget) ||
+                uploadMutation.isPending ||
+                createVersionMutation.isPending
+              }
+            >
+              {step === "uploading"
+                ? "Enviando..."
+                : step === "done"
+                  ? uploadMode === "version" ? "Enviar outra versão" : "Enviar novo documento"
+                  : uploadMode === "version" ? "Registrar versão" : "Validar e enviar"}
             </Button>
             <Button variant="outline" onClick={resetUpload} disabled={!uploaded && !uploadedDocument}>
               Limpar
@@ -330,13 +508,18 @@ const IngestionPage = () => {
             <div className="glass-card p-4 flex items-center gap-3 border-l-4 border-l-success">
               <CheckCircle2 className="h-5 w-5 text-success shrink-0" />
               <div>
-                <p className="text-sm font-medium text-foreground">Ingestão concluída com sucesso</p>
+                <p className="text-sm font-medium text-foreground">
+                  {uploadMode === "version" ? "Nova versão registrada" : "Ingestão concluída com sucesso"}
+                </p>
                 <p className="text-xs text-muted-foreground">
                   {uploadedDocument?.fileName} armazenado com validação concluída, texto extraído e metadados registrados.
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {uploadedDocument?.title} · {uploadedDocument?.author} · {uploadedDocument?.documentType}
                 </p>
+                {uploadMode === "version" && uploadedDocument && "version" in uploadedDocument && (
+                  <p className="text-xs text-muted-foreground">Versão ativa: {uploadedDocument.version}</p>
+                )}
                 <p className="text-xs text-muted-foreground">
                   {uploadedDocument?.extractedCharacters ?? 0} caracteres extraídos para processamento e indexação.
                 </p>

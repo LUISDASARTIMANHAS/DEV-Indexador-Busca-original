@@ -13,6 +13,7 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.core.logging import logger
+from app.core.schema import ensure_version_file_metadata_columns
 from app.domain.administrative_history import AdministrativeHistory
 from app.domain.document_category import DocumentCategory
 from app.domain.document_access_history import DocumentAccessHistory
@@ -39,6 +40,7 @@ async def lifespan(_: FastAPI):
     logger.info("Inicializando aplicação e criando tabelas no banco de dados")
     try:
         Base.metadata.create_all(bind=engine)
+        ensure_version_file_metadata_columns(engine)
         logger.info("Banco de dados inicializado com sucesso")
     except OperationalError as exc:
         logger.warning("Falha ao inicializar o schema do banco de dados: %s", exc)
