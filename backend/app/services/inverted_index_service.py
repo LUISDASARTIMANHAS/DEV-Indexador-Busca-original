@@ -75,7 +75,7 @@ class InvertedIndexService:
 
         history.texto_processado = "\n".join(processed_segments)
         db.flush()
-        self.refresh_all_term_statistics(db)
+        self.refresh_term_statistics(db, affected_term_ids)
 
         return {
             "term_count": total_term_count,
@@ -126,7 +126,7 @@ class InvertedIndexService:
             .filter(DocumentField.cod_campo_documento.in_(existing_field_ids))
             .delete(synchronize_session=False)
         )
-        self.refresh_all_term_statistics(db)
+        self.refresh_term_statistics(db, affected_term_ids)
         logger.info(
             "Remoção indexada do documento %s concluída: %s postings apagados, %s campos apagados, %s termos afetados",
             document_id,
@@ -260,6 +260,34 @@ class InvertedIndexService:
                 term.idf = max(int(round(scaled_idf * 1000)), 1)
             else:
                 term.idf = 0
+
+    def refresh_term_statistics(self, db: Session, term_ids: set[int]) -> int:
+        if not term_ids:
+            return 0
+
+        active_document_count = (
+            db.query(func.count(Document.cod_documento))
+            .filter(Document.ativo.is_(True))
+            .scalar()
+            or 0
+        )
+
+        terms = db.query(Term).filter(Term.cod_termo.in_(term_ids)).all()
+        for term in terms:
+            document_frequency = self._document_frequency(db, term.cod_termo)
+            term.df = document_frequency
+            if document_frequency > 0 and active_document_count > 0:
+                scaled_idf = math.log((active_document_count + 1) / (document_frequency + 1) + 1)
+                term.idf = max(int(round(scaled_idf * 1000)), 1)
+            else:
+                term.idf = 0
+
+        db.flush()
+        logger.info(
+            "Estatísticas de termos atualizadas para %s termo(s)",
+            len(terms),
+        )
+        return len(terms)
 
     def refresh_all_term_statistics(self, db: Session) -> int:
         """Atualiza df e idf para todos os termos existentes no sistema.

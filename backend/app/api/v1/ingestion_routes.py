@@ -92,7 +92,7 @@ def upload_documents_batch(
     )
     logger.info(
         "Upload em lote concluído: arquivos processados=%s",
-        len(response.get("documents", [])),
+        len(response.get("items", [])),
     )
     return response
 

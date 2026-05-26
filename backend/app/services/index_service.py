@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from os import cpu_count
 
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
+from app.core.database import SessionLocal
 from app.core.logging import logger
 from app.domain.document import Document
 from app.domain.document_field import DocumentField
@@ -163,6 +166,13 @@ class IndexService:
             trigger_label="Reindexação",
         )
 
+    def _reindex_document_in_new_session(self, document_id: int, triggered_by: User) -> None:
+        db = SessionLocal()
+        try:
+            self.reindex_document(db, document_id=document_id, triggered_by=triggered_by)
+        finally:
+            db.close()
+
     def remove_document_from_index(self, db: Session, *, document_id: int) -> dict:
         return inverted_index_service.remove_document_terms(
             db,
@@ -184,19 +194,32 @@ class IndexService:
         )
         success_count = 0
         failure_count = 0
-        for document_id in document_ids:
-            try:
-                self.reindex_document(db, document_id=document_id, triggered_by=triggered_by)
-                success_count += 1
-                logger.debug("Reindexação bem-sucedida para documento %s", document_id)
-            except Exception as exc:
-                db.rollback()
-                failure_count += 1
-                logger.warning(
-                    "Falha na reindexação do documento %s: %s",
-                    document_id,
-                    exc,
-                )
+
+        if document_ids:
+            max_workers = min(4, cpu_count() or 1, len(document_ids))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_document = {
+                    executor.submit(
+                        self._reindex_document_in_new_session,
+                        document_id,
+                        triggered_by,
+                    ): document_id
+                    for document_id in document_ids
+                }
+
+                for future in as_completed(future_to_document):
+                    document_id = future_to_document[future]
+                    try:
+                        future.result()
+                        success_count += 1
+                        logger.debug("Reindexação bem-sucedida para documento %s", document_id)
+                    except Exception as exc:
+                        failure_count += 1
+                        logger.warning(
+                            "Falha na reindexação do documento %s: %s",
+                            document_id,
+                            exc,
+                        )
 
         inverted_index_service.refresh_all_term_statistics(db)
         db.commit()
