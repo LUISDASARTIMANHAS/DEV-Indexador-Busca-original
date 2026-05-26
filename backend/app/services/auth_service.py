@@ -5,6 +5,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.logging import logger
 from app.core.security import create_access_token, verify_password
 from app.domain.user_session import UserSession
 from app.domain.user_role import UserRole
@@ -31,26 +32,31 @@ class AuthService:
 
     @staticmethod
     def authenticate_user(db: Session, identifier: str, password: str):
+        logger.debug("Authenticating user identifier=%s", identifier)
         user = UserRepository.get_by_login_or_email(db, identifier)
 
         if not user:
+            logger.warning("Authentication failed: user not found identifier=%s", identifier)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Usuário ou senha inválidos",
             )
 
         if not verify_password(password, user.senha_hash):
+            logger.warning("Authentication failed: invalid password for user_id=%s", user.cod_usuario)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Usuário ou senha inválidos",
             )
 
         if not user.ativo:
+            logger.warning("Authentication failed: inactive user_id=%s", user.cod_usuario)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Usuário inativo",
             )
 
+        logger.info("Authentication succeeded for user_id=%s", user.cod_usuario)
         return user
 
     @staticmethod
@@ -90,14 +96,17 @@ class AuthService:
 
     @staticmethod
     def logout(db: Session, *, session_id: str) -> dict:
+        logger.info("Logout requested for session=%s", session_id)
         session = AuthService.session_repository.get_by_identifier(db, session_id)
         if session is not None and session.revogado_em is None:
             session.revogado_em = datetime.utcnow()
             AuthService.session_repository.save(db, session)
+        logger.info("Logout completed for session=%s", session_id)
         return {"message": "Sessão encerrada com sucesso."}
 
     @staticmethod
     def login(db: Session, identifier: str, password: str):
+        logger.info("Login started for identifier=%s", identifier)
         user = AuthService.authenticate_user(db, identifier, password)
         session = AuthService._create_session(db, user.cod_usuario)
         token = create_access_token(
@@ -109,7 +118,7 @@ class AuthService:
             },
             expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
         )
-        return {
+        result = {
             "id": user.cod_usuario,
             "name": user.nome,
             "login": user.login,
@@ -121,3 +130,5 @@ class AuthService:
             "token_type": "bearer",
             "expiresAt": session.expira_em.isoformat(),
         }
+        logger.info("Login completed for user_id=%s session=%s", user.cod_usuario, session.identificador_sessao)
+        return result

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.logging import logger
 from app.domain.user import User
 from app.schemas.search_schema import (
     SearchHistoryItemResponse,
@@ -31,6 +32,19 @@ def search_documents(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    logger.info(
+        "Search requested by user=%s query=%s category=%s documentType=%s author=%s dateFrom=%s dateTo=%s sortBy=%s limit=%s page=%s",
+        current_user.email,
+        q,
+        category,
+        documentType,
+        author,
+        dateFrom,
+        dateTo,
+        sortBy,
+        limit,
+        page,
+    )
     return search_service.search(
         db,
         query=q,
@@ -52,6 +66,7 @@ def list_recent_searches(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    logger.info("Recent search history requested for user=%s limit=%s", current_user.email, limit)
     return search_service.list_recent_searches(
         db,
         user_id=current_user.cod_usuario,
@@ -69,6 +84,15 @@ def list_search_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    logger.info(
+        "Search history requested for user=%s query=%s performedFrom=%s performedTo=%s limit=%s page=%s",
+        current_user.email,
+        q,
+        performedFrom,
+        performedTo,
+        limit,
+        page,
+    )
     return search_service.list_search_history(
         db,
         current_user=current_user,

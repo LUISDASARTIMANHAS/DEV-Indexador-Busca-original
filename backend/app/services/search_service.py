@@ -4,6 +4,7 @@ import time
 
 from sqlalchemy.orm import Session
 
+from app.core.logging import logger
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.search_repository import SearchRepository
 from app.domain.user import User
@@ -33,6 +34,19 @@ class SearchService:
         sort_by: str | None = None,
     ) -> dict:
         started_at = time.perf_counter()
+        logger.info(
+            "Search started user_id=%s query=%s category=%s document_type=%s author=%s date_from=%s date_to=%s sort_by=%s limit=%s page=%s",
+            user_id,
+            query,
+            category,
+            document_type,
+            author,
+            date_from,
+            date_to,
+            sort_by,
+            limit,
+            page,
+        )
         if not query or not query.strip():
             return self._empty_response(
                 query=query,
@@ -143,6 +157,15 @@ class SearchService:
             ),
             result_count=len(ranked_payloads),
             response_time_ms=response_time_ms,
+        )
+        logger.info(
+            "Search completed user_id=%s query=%s total=%s page=%s per_page=%s response_time_ms=%s",
+            user_id,
+            query,
+            len(ranked_payloads),
+            page,
+            limit,
+            response_time_ms,
         )
         return response
 

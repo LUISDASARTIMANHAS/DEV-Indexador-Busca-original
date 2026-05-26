@@ -3,6 +3,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
+from app.core.logging import logger
 from app.domain.user import User
 from app.schemas.user_schema import UserUpdate
 
@@ -14,12 +15,12 @@ class UserRepository:
 
     @staticmethod
     def get_by_email(db: Session, email: str) -> User | None:
-        print(f"Searching for user with email: {email}")
+        logger.debug("Searching for user with email=%s", email)
         return db.query(User).filter(User.email == email).first()
 
     @staticmethod
     def get_by_login_or_email(db: Session, identifier: str) -> User | None:
-        print(f"Searching for user with identifier: {identifier}")
+        logger.debug("Searching for user with identifier=%s", identifier)
         return (
             db.query(User)
             .filter(or_(User.login == identifier, User.email == identifier))
