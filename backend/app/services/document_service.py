@@ -4,13 +4,17 @@ import json
 import hashlib
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from mimetypes import guess_type
+from os import cpu_count
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
+
+from app.core.database import SessionLocal
 
 from app.adapters.document_adapter_registry import document_adapter_registry
 from app.core.config import settings
@@ -42,6 +46,206 @@ class DocumentService:
         self.max_size_bytes = settings.DOCUMENT_MAX_FILE_SIZE_MB * 1024 * 1024
         self.storage_dir = Path(settings.DOCUMENT_UPLOAD_DIR)
 
+    def _read_file_payload(self, file: UploadFile) -> dict:
+        content = file.file.read()
+        filename = file.filename or ""
+        content_type = file.content_type or ""
+        file.file.close()
+        return {
+            "content": content,
+            "filename": filename,
+            "content_type": content_type,
+        }
+
+    def _upload_document_internal(
+        self,
+        db: Session,
+        *,
+        content: bytes,
+        filename: str,
+        content_type: str,
+        category: str,
+        uploaded_by: User,
+        document_date: date | None = None,
+        title: str | None = None,
+        author: str | None = None,
+        document_type: str | None = None,
+    ) -> dict:
+        started_at = time.perf_counter()
+
+        try:
+            extension = self._extract_extension(filename)
+            self._validate_extension(extension)
+            adapter = self.adapter_registry.get(extension)
+            self._validate_size(content)
+            adapter.validate_integrity(content)
+            extracted_content = adapter.extract_text(content)
+        except DocumentValidationException as exc:
+            self._register_invalid_document(db, uploaded_by, filename, exc.detail)
+            db.rollback()
+            raise
+
+        storage_path = self._store_file(content, extension)
+        document_title = self._normalize_metadata_value(
+            title,
+            fallback=self._build_default_title(filename),
+            max_length=255,
+        )
+        document_author = self._normalize_metadata_value(
+            author,
+            fallback=uploaded_by.nome,
+            max_length=255,
+        )
+        metadata_document_type = self._normalize_metadata_value(
+            document_type,
+            fallback=extension.upper(),
+            max_length=100,
+        )
+        original_file_name = self._normalize_metadata_value(
+            filename,
+            fallback=f"{document_title}.{extension}",
+            max_length=255,
+        )
+        mime_type = self._normalize_metadata_value(
+            content_type,
+            fallback=adapter.mime_type,
+            max_length=255,
+        )
+        file_hash = hashlib.sha256(content).hexdigest()
+        category_row = self._get_or_create_category(db, category.strip())
+        processing_status = self._get_or_create_status(db, "processando")
+
+        document = Document(
+            cod_categoria=category_row.cod_categoria,
+            titulo=document_title,
+            tipo=extension.upper(),
+            data_publicacao=self._coerce_document_datetime(document_date),
+            ativo=True,
+            cod_usuario_criador=uploaded_by.cod_usuario,
+        )
+        db.add(document)
+        db.flush()
+
+        metadata = DocumentMetadata(
+            cod_documento=document.cod_documento,
+            autor=document_author,
+            tipo_documento=metadata_document_type,
+            nome_arquivo_original=original_file_name,
+            mime_type=mime_type,
+            tamanho_bytes=len(content),
+            hash_arquivo=file_hash,
+        )
+        db.add(metadata)
+        db.flush()
+
+        history_document = DocumentHistory(
+            cod_documento=document.cod_documento,
+            cod_usuario=uploaded_by.cod_usuario,
+            numero_versao=1,
+            caminho_arquivo=str(storage_path),
+            texto_extraido=extracted_content,
+            texto_processado=extracted_content,
+            versao_ativa=True,
+        )
+        db.add(history_document)
+        db.flush()
+
+        ingestion_history = IngestionHistory(
+            cod_usuario=uploaded_by.cod_usuario,
+            cod_documento=document.cod_documento,
+            cod_status_ingestao=processing_status.cod_status_ingestao,
+            tipo_ingestao="manual",
+            mensagem_erro=None,
+            tempo_processamento_ms=0,
+        )
+        db.add(ingestion_history)
+        db.flush()
+
+        try:
+            index_service.process_document(
+                db,
+                document_id=document.cod_documento,
+                triggered_by=uploaded_by,
+                trigger_label="Ingestão",
+            )
+            completed_status = self._get_or_create_status(db, "concluido")
+            ingestion_history.cod_status_ingestao = completed_status.cod_status_ingestao
+            ingestion_history.mensagem_erro = None
+        except Exception as exc:
+            failed_status = self._get_or_create_status(db, "falha")
+            ingestion_history.cod_status_ingestao = failed_status.cod_status_ingestao
+            ingestion_history.mensagem_erro = str(exc)[:255]
+            ingestion_history.tempo_processamento_ms = int(
+                (time.perf_counter() - started_at) * 1000
+            )
+            db.rollback()
+            raise
+
+        ingestion_history.tempo_processamento_ms = int((time.perf_counter() - started_at) * 1000)
+        db.commit()
+        administrative_history_service.log_action(
+            db,
+            actor=uploaded_by,
+            description=f"Upload do documento {document_title}.{extension} concluído.",
+            action_type="Ingestão",
+            entity_type="documento",
+            entity_id=document.cod_documento,
+        )
+
+        return self.get_document_payload(db, document.cod_documento)
+
+    def upload_document(
+        self,
+        db: Session,
+        *,
+        file: UploadFile,
+        category: str,
+        uploaded_by: User,
+        document_date: date | None = None,
+        title: str | None = None,
+        author: str | None = None,
+        document_type: str | None = None,
+    ) -> dict:
+        payload = self._read_file_payload(file)
+        return self._upload_document_internal(
+            db,
+            content=payload["content"],
+            filename=payload["filename"],
+            content_type=payload["content_type"],
+            category=category,
+            uploaded_by=uploaded_by,
+            document_date=document_date,
+            title=title,
+            author=author,
+            document_type=document_type,
+        )
+
+    def _upload_document_with_new_session(
+        self,
+        file_payload: dict,
+        *,
+        category: str,
+        uploaded_by: User,
+        document_date: date | None = None,
+        author: str | None = None,
+        document_type: str | None = None,
+    ) -> dict:
+        db = SessionLocal()
+        try:
+            return self._upload_document_internal(
+                db,
+                content=file_payload["content"],
+                filename=file_payload["filename"],
+                content_type=file_payload["content_type"],
+                category=category,
+                uploaded_by=uploaded_by,
+                document_date=document_date,
+                title=file_payload.get("title"),
+                author=author,
+                document_type=document_type,
+            )
+        finally:
+            db.close()
 
     def update_document(
         self,
@@ -286,148 +490,6 @@ class DocumentService:
 
 
 
-    def upload_document(
-        self,
-        db: Session,
-        *,
-        file: UploadFile,
-        category: str,
-        uploaded_by: User,
-        document_date: date | None = None,
-        title: str | None = None,
-        author: str | None = None,
-        document_type: str | None = None,
-    ) -> dict:
-        started_at = time.perf_counter()
-        filename = file.filename or ""
-        normalized_category = category.strip()
-
-        try:
-            extension = self._extract_extension(filename)
-            self._validate_extension(extension)
-            adapter = self.adapter_registry.get(extension)
-            if not normalized_category:
-                raise DocumentValidationException("Informe uma categoria válida para o documento.")
-
-            content = file.file.read()
-            self._validate_size(content)
-            adapter.validate_integrity(content)
-            extracted_content = adapter.extract_text(content)
-        except DocumentValidationException as exc:
-            self._register_invalid_document(db, uploaded_by, filename, exc.detail)
-            raise
-        finally:
-            file.file.close()
-
-        storage_path = self._store_file(content, extension)
-        document_title = self._normalize_metadata_value(
-            title,
-            fallback=self._build_default_title(filename),
-            max_length=255,
-        )
-        document_author = self._normalize_metadata_value(
-            author,
-            fallback=uploaded_by.nome,
-            max_length=255,
-        )
-        metadata_document_type = self._normalize_metadata_value(
-            document_type,
-            fallback=extension.upper(),
-            max_length=100,
-        )
-        original_file_name = self._normalize_metadata_value(
-            filename,
-            fallback=f"{document_title}.{extension}",
-            max_length=255,
-        )
-        mime_type = self._normalize_metadata_value(
-            file.content_type,
-            fallback=adapter.mime_type,
-            max_length=255,
-        )
-        file_hash = hashlib.sha256(content).hexdigest()
-        category_row = self._get_or_create_category(db, normalized_category)
-        processing_status = self._get_or_create_status(db, "processando")
-
-        document = Document(
-            cod_categoria=category_row.cod_categoria,
-            titulo=document_title,
-            tipo=extension.upper(),
-            data_publicacao=self._coerce_document_datetime(document_date),
-            ativo=True,
-            cod_usuario_criador=uploaded_by.cod_usuario,
-        )
-        db.add(document)
-        db.flush()
-
-        metadata = DocumentMetadata(
-            cod_documento=document.cod_documento,
-            autor=document_author,
-            tipo_documento=metadata_document_type,
-            nome_arquivo_original=original_file_name,
-            mime_type=mime_type,
-            tamanho_bytes=len(content),
-            hash_arquivo=file_hash,
-        )
-        db.add(metadata)
-        db.flush()
-
-        history_document = DocumentHistory(
-            cod_documento=document.cod_documento,
-            cod_usuario=uploaded_by.cod_usuario,
-            numero_versao=1,
-            caminho_arquivo=str(storage_path),
-            texto_extraido=extracted_content,
-            texto_processado=extracted_content,
-            versao_ativa=True,
-        )
-        db.add(history_document)
-        db.flush()
-
-        ingestion_history = IngestionHistory(
-            cod_usuario=uploaded_by.cod_usuario,
-            cod_documento=document.cod_documento,
-            cod_status_ingestao=processing_status.cod_status_ingestao,
-            tipo_ingestao="manual",
-            mensagem_erro=None,
-            tempo_processamento_ms=0,
-        )
-        db.add(ingestion_history)
-        db.flush()
-
-        try:
-            index_service.process_document(
-                db,
-                document_id=document.cod_documento,
-                triggered_by=uploaded_by,
-                trigger_label="Ingestão",
-            )
-            completed_status = self._get_or_create_status(db, "concluido")
-            ingestion_history.cod_status_ingestao = completed_status.cod_status_ingestao
-            ingestion_history.mensagem_erro = None
-        except Exception as exc:
-            failed_status = self._get_or_create_status(db, "falha")
-            ingestion_history.cod_status_ingestao = failed_status.cod_status_ingestao
-            ingestion_history.mensagem_erro = str(exc)[:255]
-            ingestion_history.tempo_processamento_ms = int(
-                (time.perf_counter() - started_at) * 1000
-            )
-            db.commit()
-            raise
-
-        ingestion_history.tempo_processamento_ms = int((time.perf_counter() - started_at) * 1000)
-        db.commit()
-        administrative_history_service.log_action(
-            db,
-            actor=uploaded_by,
-            description=f"Upload do documento {document_title}.{extension} concluído.",
-            action_type="Ingestão",
-            entity_type="documento",
-            entity_id=document.cod_documento,
-        )
-
-        return self.get_document_payload(db, document.cod_documento)
-
     def upload_documents_batch(
         self,
         db: Session,
@@ -441,57 +503,83 @@ class DocumentService:
     ) -> dict:
         items: list[dict] = []
         success_count = 0
+        payloads: list[dict] = []
 
         for file in files:
             try:
-                payload = self.upload_document(
-                    db,
-                    file=file,
-                    category=category,
-                    uploaded_by=uploaded_by,
-                    document_date=document_date,
-                    author=author,
-                    document_type=document_type,
-                )
-                items.append(
-                    {
-                        "fileName": payload["file_name"],
-                        "status": "indexed",
-                        "message": "Documento validado, extraído e armazenado com sucesso.",
-                        "documentId": payload["id"],
-                        "extractedCharacters": len(payload["content"] or ""),
-                        "sizeLabel": self._format_size(payload["size_bytes"]),
-                    }
-                )
-                success_count += 1
-            except DocumentValidationException as exc:
-                items.append(
-                    {
-                        "fileName": file.filename or "arquivo-sem-nome",
-                        "status": "error",
-                        "message": exc.detail,
-                        "documentId": None,
-                        "extractedCharacters": 0,
-                        "sizeLabel": None,
-                    }
-                )
+                payloads.append(self._read_file_payload(file))
             except Exception:
-                self._register_invalid_document(
-                    db,
-                    uploaded_by,
-                    file.filename or "arquivo-sem-nome",
-                    "Falha inesperada no processamento em lote.",
-                )
                 items.append(
                     {
                         "fileName": file.filename or "arquivo-sem-nome",
                         "status": "error",
-                        "message": "Falha inesperada no processamento do arquivo.",
+                        "message": "Falha ao ler o arquivo para upload.",
                         "documentId": None,
                         "extractedCharacters": 0,
                         "sizeLabel": None,
                     }
                 )
+
+        if payloads:
+            max_workers = min(4, cpu_count() or 1, len(payloads))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_payload = {
+                    executor.submit(
+                        self._upload_document_with_new_session,
+                        payload,
+                        category=category,
+                        uploaded_by=uploaded_by,
+                        document_date=document_date,
+                        author=author,
+                        document_type=document_type,
+                    ): payload
+                    for payload in payloads
+                }
+
+                for future in as_completed(future_to_payload):
+                    payload = future_to_payload[future]
+                    filename = payload.get("filename") or "arquivo-sem-nome"
+                    try:
+                        document_payload = future.result()
+                        items.append(
+                            {
+                                "fileName": document_payload["file_name"],
+                                "status": "indexed",
+                                "message": "Documento validado, extraído e armazenado com sucesso.",
+                                "documentId": document_payload["id"],
+                                "extractedCharacters": len(document_payload["content"] or ""),
+                                "sizeLabel": self._format_size(document_payload["size_bytes"]),
+                            }
+                        )
+                        success_count += 1
+                    except DocumentValidationException as exc:
+                        items.append(
+                            {
+                                "fileName": filename,
+                                "status": "error",
+                                "message": exc.detail,
+                                "documentId": None,
+                                "extractedCharacters": 0,
+                                "sizeLabel": None,
+                            }
+                        )
+                    except Exception:
+                        self._register_invalid_document(
+                            db,
+                            uploaded_by,
+                            filename,
+                            "Falha inesperada no processamento em lote.",
+                        )
+                        items.append(
+                            {
+                                "fileName": filename,
+                                "status": "error",
+                                "message": "Falha inesperada no processamento do arquivo.",
+                                "documentId": None,
+                                "extractedCharacters": 0,
+                                "sizeLabel": None,
+                            }
+                        )
 
         total_files = len(files)
         if total_files > 0:
