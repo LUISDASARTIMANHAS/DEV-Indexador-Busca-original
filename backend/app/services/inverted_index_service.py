@@ -4,6 +4,7 @@ import math
 from collections.abc import Iterable
 
 from sqlalchemy import distinct, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.logging import logger
@@ -237,8 +238,18 @@ class InvertedIndexService:
 
         term = Term(texto_termo=token, df=0, idf=0)
         db.add(term)
-        db.flush()
-        return term
+        try:
+            db.flush()
+            return term
+        except IntegrityError:
+            # Another thread/process inserted the same term concurrently.
+            # Rollback this session's failed flush and return the existing row.
+            db.rollback()
+            existing = db.query(Term).filter(Term.texto_termo == token).first()
+            if existing is not None:
+                return existing
+            # If still not found, re-raise to surface the unexpected error.
+            raise
 
     def _refresh_term_statistics(self, db: Session, term_ids: set[int]) -> None:
         active_document_count = (
