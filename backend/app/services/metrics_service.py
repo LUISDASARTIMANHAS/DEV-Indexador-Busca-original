@@ -68,6 +68,21 @@ class MetricsService:
             for term, count in term_counter.most_common(5)
         ]
 
+        top_queries_rows = (
+            db.query(
+                SearchHistory.consulta_texto,
+                func.count(SearchHistory.cod_historico_busca),
+            )
+            .group_by(SearchHistory.consulta_texto)
+            .order_by(func.count(SearchHistory.cod_historico_busca).desc())
+            .limit(5)
+            .all()
+        )
+        top_queries = [
+            {"name": row[0], "value": row[1]}
+            for row in top_queries_rows
+        ]
+
         documents_by_category_rows = (
             db.query(
                 DocumentCategory.nome_categoria,
@@ -107,6 +122,7 @@ class MetricsService:
             },
             "queriesByDay": queries_by_day,
             "topTerms": top_terms,
+            "topQueries": top_queries,
             "documentsByCategory": documents_by_category,
             "queryOutcomeDistribution": query_outcome_distribution,
             "recentCalculations": self.list_calculations(db, limit=5),

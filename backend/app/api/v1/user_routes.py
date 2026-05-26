@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import require_roles
+from app.core.logging import logger
 from app.domain.user import User
 from app.domain.user_role import UserRole
 from app.schemas.user_schema import UserCreate, UserResponse, UserUpdate
@@ -24,6 +25,7 @@ def create_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
+    logger.info("Create user requested by admin=%s email=%s", current_user.email, user_create.email)
     created_user = user_service.create_user(db, user_create)
     administrative_history_service.log_action(
         db,
@@ -46,7 +48,7 @@ def read_users(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.ADMIN)),
 ):
-    print(f"Admin user is retrieving users with skip={skip} and limit={limit}.")
+    logger.info("Admin listing users with skip=%s limit=%s", skip, limit)
     """
     Retrieve all users. (Admin only)
     """
@@ -75,6 +77,7 @@ def update_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
+    logger.info("Update user requested by admin=%s user_id=%s", current_user.email, user_id)
     updated_user = user_service.update_user(db, user_id, user_update)
     administrative_history_service.log_action(
         db,
@@ -96,6 +99,7 @@ def delete_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
+    logger.info("Delete user requested by admin=%s user_id=%s", current_user.email, user_id)
     deleted_user = user_service.delete_user(db, user_id)
     administrative_history_service.log_action(
         db,

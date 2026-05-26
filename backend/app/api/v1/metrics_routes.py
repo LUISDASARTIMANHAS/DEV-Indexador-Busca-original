@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dependencies import require_roles
+from app.core.logging import logger
 from app.domain.user import User
 from app.domain.user_role import UserRole
 from app.schemas.metrics_schema import (
@@ -23,7 +24,10 @@ def get_metrics_snapshot(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.ADMIN)),
 ):
-    return metrics_service.snapshot(db)
+    logger.info("Metrics snapshot requested")
+    result = metrics_service.snapshot(db)
+    logger.debug("Metrics snapshot result: %s", result)
+    return result
 
 
 @router.get("/report", response_model=SearchReportResponse)
@@ -33,6 +37,7 @@ def get_search_report(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.ADMIN)),
 ):
+    logger.info("Search report requested dateFrom=%s dateTo=%s", dateFrom, dateTo)
     return metrics_service.build_report(
         db,
         date_from=dateFrom,
@@ -49,6 +54,7 @@ def export_search_report(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.ADMIN)),
 ):
+    logger.info("Export search report requested format=%s dateFrom=%s dateTo=%s", format, dateFrom, dateTo)
     content, file_name, media_type = metrics_service.export_report(
         db,
         export_format=format,
@@ -68,6 +74,7 @@ def list_metric_calculations(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.ADMIN)),
 ):
+    logger.info("List metric calculations requested limit=%s", limit)
     return metrics_service.list_calculations(db, limit=limit)
 
 
@@ -78,6 +85,7 @@ def persist_metric_calculation(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.ADMIN)),
 ):
+    logger.info("Persist metric calculation requested dateFrom=%s dateTo=%s", dateFrom, dateTo)
     return metrics_service.persist_calculation(
         db,
         date_from=dateFrom,
