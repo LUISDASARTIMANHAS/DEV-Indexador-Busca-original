@@ -19,7 +19,7 @@ const navItems = [
   { title: "Métricas", path: "/metricas", icon: BarChart3, adminOnly: true },
   { title: "Histórico", path: "/historico", icon: Clock, adminOnly: false },
   { title: "Gestão de Usuários", path: "/usuarios", icon: Users, adminOnly: true },
-  { title: "Configurações", path: "/configuracoes", icon: Settings, adminOnly: false },
+  { title: "Configurações", path: "/configuracoes", icon: Settings, adminOnly: true },
 ];
 
 export function AppSidebar() {

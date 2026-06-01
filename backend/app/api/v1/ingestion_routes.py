@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 from app.core.logging import logger
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user
+from app.core.dependencies import require_roles
 from app.domain.user import User
+from app.domain.user_role import UserRole
 from app.schemas.document_schema import (
     BatchUploadResponse,
     DocumentUploadResponse,
@@ -32,7 +33,7 @@ def upload_document(
     author: str | None = Form(default=None),
     document_type: str | None = Form(default=None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     logger.info(
         "Upload de documento iniciado por usuário %s (%s): filename=%s category=%s",
@@ -72,7 +73,7 @@ def upload_documents_batch(
     author: str | None = Form(default=None),
     document_type: str | None = Form(default=None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     logger.info(
         "Upload em lote iniciado por usuário %s (%s): arquivos=%s categoria=%s",
@@ -100,7 +101,7 @@ def upload_documents_batch(
 @router.get("/batch", response_model=list[IngestionBatchFileResponse])
 def get_batch_files(
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     logger.info("Listagem de arquivos em lote solicitada")
     documents = document_service.list_batch_files(db)
@@ -110,8 +111,7 @@ def get_batch_files(
 @router.get("/history", response_model=list[IngestionHistoryEntryResponse])
 def get_ingestion_history(
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     logger.info("Listagem de histórico de ingestão solicitada")
-    documents = document_service.list_ingestion_history(db)
-    return [document_service.to_history_response(document) for document in documents]
+    return document_service.list_ingestion_history_entries(db)

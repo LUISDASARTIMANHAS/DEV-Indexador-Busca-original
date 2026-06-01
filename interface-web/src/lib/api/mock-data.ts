@@ -178,6 +178,7 @@ export const mockSearch = (
   const start = (safePage - 1) * perPage;
 
   return {
+    searchId: 500 + safePage,
     query,
     total,
     page: safePage,

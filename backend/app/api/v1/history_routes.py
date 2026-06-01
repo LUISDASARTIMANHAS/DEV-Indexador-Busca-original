@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends
+from datetime import date
+
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -14,8 +16,18 @@ router = APIRouter(prefix="/history", tags=["History"])
 
 @router.get("/", response_model=list[AdministrativeHistoryResponse])
 def list_history(
+    userId: int | None = Query(default=None, ge=1),
+    dateFrom: date | None = Query(default=None),
+    dateTo: date | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.ADMIN)),
 ):
-    logger.info("Administrative history requested")
-    return administrative_history_service.list_history(db)
+    logger.info("Administrative history requested userId=%s dateFrom=%s dateTo=%s", userId, dateFrom, dateTo)
+    return administrative_history_service.list_history(
+        db,
+        limit=limit,
+        user_id=userId,
+        performed_from=dateFrom,
+        performed_to=dateTo,
+    )

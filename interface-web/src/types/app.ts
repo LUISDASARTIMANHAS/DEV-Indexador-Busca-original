@@ -40,6 +40,7 @@ export type SearchResult = {
 };
 
 export type SearchResponse = {
+  searchId: number | null;
   query: string;
   total: number;
   page: number;
@@ -47,6 +48,22 @@ export type SearchResponse = {
   totalPages: number;
   responseTimeMs: number;
   items: SearchResult[];
+};
+
+export type RelevanceFeedbackPayload = {
+  searchId: number;
+  documentId: number;
+  rating: number;
+  comment?: string;
+};
+
+export type RelevanceFeedback = {
+  id: number;
+  searchId: number;
+  documentId: number;
+  rating: number;
+  comment?: string | null;
+  createdAt: string;
 };
 
 export type SearchHistoryItem = {
@@ -328,6 +345,13 @@ export type HistoryEntry = {
   action: string;
   details: string;
   status: "success" | "error" | "info" | "warning";
+};
+
+export type AdministrativeHistoryFilters = {
+  userId?: number;
+  dateFrom?: string;
+  dateTo?: string;
+  limit?: number;
 };
 
 export type NotificationType = "info" | "success" | "warning" | "error";

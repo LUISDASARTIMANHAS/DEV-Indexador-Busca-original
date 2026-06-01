@@ -69,7 +69,7 @@ class SearchService:
                 per_page=limit,
                 response_time_ms=response_time_ms,
             )
-            self._register_search(
+            response["searchId"] = self._register_search(
                 db,
                 user_id=user_id,
                 query=query,
@@ -148,7 +148,7 @@ class SearchService:
             "responseTimeMs": response_time_ms,
             "items": items,
         }
-        self._register_search(
+        response["searchId"] = self._register_search(
             db,
             user_id=user_id,
             query=query,
@@ -431,8 +431,8 @@ class SearchService:
         filters: str | None,
         result_count: int,
         response_time_ms: int,
-    ) -> None:
-        self.repository.create_search_history(
+    ) -> int:
+        history = self.repository.create_search_history(
             db,
             user_id=user_id,
             query=query,
@@ -440,6 +440,7 @@ class SearchService:
             result_count=result_count,
             response_time_ms=response_time_ms,
         )
+        return int(history.cod_historico_busca)
 
     def _elapsed_response_time_ms(self, started_at: float) -> int:
         return max(int((time.perf_counter() - started_at) * 1000), 0)
@@ -515,6 +516,7 @@ class SearchService:
         response_time_ms: int,
     ) -> dict:
         return {
+            "searchId": None,
             "query": query,
             "total": 0,
             "page": page,

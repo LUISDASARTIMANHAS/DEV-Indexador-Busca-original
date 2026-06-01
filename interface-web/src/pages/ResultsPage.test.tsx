@@ -53,6 +53,7 @@ describe("ResultsPage", () => {
   beforeEach(() => {
     vi.mocked(useSearchResults).mockReturnValue({
       data: {
+        searchId: 901,
         query: "resolucao",
         total: 1,
         page: 1,
@@ -95,6 +96,8 @@ describe("ResultsPage", () => {
     const marked = container.querySelector("mark");
     expect(marked).toHaveTextContent("resolução");
     expect(container.querySelector("script")).toBeNull();
+    expect(screen.getByRole("button", { name: "PDF" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Avaliar 5 de 5" })).toBeEnabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Versões" }));
 

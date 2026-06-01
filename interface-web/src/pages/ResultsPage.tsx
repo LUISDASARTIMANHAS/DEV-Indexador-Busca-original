@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, FileText, Calendar, Tag, Download, SearchX, ChevronLeft, ChevronRight, FileJson, User, ExternalLink, History } from "lucide-react";
+import { ArrowLeft, FileText, Calendar, Tag, Download, SearchX, ChevronLeft, ChevronRight, User, ExternalLink, History, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -8,6 +8,9 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageError, PageLoader } from "@/components/PageState";
 import { useDocument, useDocumentVersions, useSearchResults } from "@/hooks/use-app-query";
+import { useToast } from "@/hooks/use-toast";
+import { feedbackService } from "@/lib/api/services";
+import { buildTextPdfBlob } from "@/lib/pdf";
 import type { SearchResult } from "@/types/app";
 
 const csvEscape = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
@@ -48,7 +51,7 @@ const formatSortLabel = (value: string) => {
   }
 };
 
-const saveBlob = (content: string, filename: string, type: string) => {
+const saveBlob = (content: BlobPart, filename: string, type: string) => {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const anchor = window.document.createElement("a");
@@ -60,9 +63,10 @@ const saveBlob = (content: string, filename: string, type: string) => {
   URL.revokeObjectURL(url);
 };
 
-const buildResultsCsv = (items: SearchResult[]) => {
-  const header = ["id", "titulo", "autor", "arquivo", "categoria", "tipo", "formato", "tamanho", "data", "relevancia", "trecho"];
+const buildResultsCsv = (query: string, items: SearchResult[]) => {
+  const header = ["consulta", "id", "titulo", "autor", "arquivo", "categoria", "tipo", "formato", "tamanho", "data", "relevancia", "trecho"];
   const rows = items.map((item) => [
+    query,
     item.id,
     item.title,
     item.author,
@@ -93,9 +97,12 @@ const getPageNumbers = (current: number, total: number) => {
 };
 
 const ResultsPage = () => {
+  const { toast } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const [previewSelection, setPreviewSelection] = useState<{ documentId: number; version?: number } | null>(null);
+  const [ratings, setRatings] = useState<Record<number, number>>({});
+  const [ratingInProgress, setRatingInProgress] = useState<number | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
   const currentPage = Number(searchParams.get("page") || "1");
@@ -135,21 +142,64 @@ const ResultsPage = () => {
       return;
     }
     saveBlob(
-      buildResultsCsv(data.items),
+      buildResultsCsv(query, data.items),
       `resultados-${query || "busca"}.csv`,
       "text/csv;charset=utf-8",
     );
   };
 
-  const exportJson = () => {
+  const exportPdf = () => {
     if (!data) {
       return;
     }
+    const lines = [
+      `Resultados da busca: ${query}`,
+      `Total de documentos: ${data.total}`,
+      "",
+      ...data.items.flatMap((item, index) => [
+        `${index + 1}. ${item.title}`,
+        `${item.author} | ${item.category} | ${item.documentType} | Relevancia ${item.relevance}%`,
+        stripHtml(item.snippet),
+        "",
+      ]),
+    ];
     saveBlob(
-      JSON.stringify(data, null, 2),
-      `resultados-${query || "busca"}.json`,
-      "application/json;charset=utf-8",
+      buildTextPdfBlob(lines),
+      `resultados-${query || "busca"}.pdf`,
+      "application/pdf",
     );
+  };
+
+  const submitRating = async (documentId: number, rating: number) => {
+    if (!data?.searchId) {
+      toast({
+        title: "Avaliação indisponível",
+        description: "Não foi possível associar a avaliação a esta consulta.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setRatingInProgress(documentId);
+    try {
+      await feedbackService.submit({
+        searchId: data.searchId,
+        documentId,
+        rating,
+      });
+      setRatings((current) => ({ ...current, [documentId]: rating }));
+      toast({
+        title: "Avaliação registrada",
+        description: "A relevância deste documento foi registrada para análise.",
+      });
+    } catch {
+      toast({
+        title: "Falha ao registrar avaliação",
+        description: "Não foi possível armazenar sua avaliação de relevância.",
+        variant: "destructive",
+      });
+    } finally {
+      setRatingInProgress(null);
+    }
   };
 
   const openDocument = (id: number, version?: number) => {
@@ -209,9 +259,9 @@ const ResultsPage = () => {
               <Download className="h-3.5 w-3.5" />
               CSV
             </Button>
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={exportJson}>
-              <FileJson className="h-3.5 w-3.5" />
-              JSON
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={exportPdf}>
+              <FileText className="h-3.5 w-3.5" />
+              PDF
             </Button>
           </div>
         )}
@@ -267,6 +317,28 @@ const ResultsPage = () => {
                         <Progress value={doc.relevance} className="w-16 h-1.5" />
                         <span className="font-medium text-foreground">{doc.relevance}%</span>
                       </span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-border pt-3">
+                      <span className="mr-2 text-xs text-muted-foreground">Avaliar relevância</span>
+                      {[1, 2, 3, 4, 5].map((rating) => (
+                        <Button
+                          key={rating}
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          title={`Avaliar ${rating} de 5`}
+                          aria-label={`Avaliar ${rating} de 5`}
+                          disabled={ratingInProgress === doc.id || !data.searchId}
+                          onClick={() => submitRating(doc.id, rating)}
+                        >
+                          <Star
+                            className={`h-4 w-4 ${rating <= (ratings[doc.id] ?? 0) ? "fill-warning text-warning" : "text-muted-foreground"}`}
+                          />
+                        </Button>
+                      ))}
+                      {ratings[doc.id] && (
+                        <span className="ml-2 text-xs text-success">Registrada</span>
+                      )}
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-col gap-2">

@@ -15,10 +15,14 @@ from app.main import app
 from app.services.document_service import document_service
 
 
-def _login(client: TestClient) -> str:
+def _login(
+    client: TestClient,
+    email: str = "admin@ifes.edu.br",
+    password: str = "admin123",
+) -> str:
     response = client.post(
         "/api/v1/auth/login",
-        json={"email": "admin@ifes.edu.br", "password": "admin123"},
+        json={"email": email, "password": password},
     )
     assert response.status_code == 200
     return response.json()["token"]
@@ -90,7 +94,15 @@ def _client_fixture(tmp_path: Path) -> Generator[TestClient, None, None]:
         perfil=UserRole.ADMIN.value,
         ativo=True,
     )
-    db.add(admin)
+    user = User(
+        nome="Usuário",
+        login="usuario",
+        email="usuario@ifes.edu.br",
+        senha_hash=hash_password("usuario123"),
+        perfil=UserRole.USER.value,
+        ativo=True,
+    )
+    db.add_all([admin, user])
     db.commit()
     db.close()
 
@@ -131,6 +143,7 @@ def test_search_returns_ranked_documents_and_recent_history(tmp_path: Path):
         assert search_response.status_code == 200
         payload = search_response.json()
         assert payload["query"] == "pesquisa ifes"
+        assert payload["searchId"] > 0
         assert payload["total"] >= 2
         assert payload["responseTimeMs"] >= 0
         assert payload["items"][0]["relevance"] >= payload["items"][-1]["relevance"]
@@ -144,6 +157,20 @@ def test_search_returns_ranked_documents_and_recent_history(tmp_path: Path):
         assert history_response.status_code == 200
         history_payload = history_response.json()
         assert history_payload[0]["term"] == "pesquisa ifes"
+
+        feedback_response = client.post(
+            "/api/v1/feedback",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "searchId": payload["searchId"],
+                "documentId": payload["items"][0]["id"],
+                "rating": 9,
+                "comment": "Resultado relevante.",
+            },
+        )
+        assert feedback_response.status_code == 201
+        assert feedback_response.json()["rating"] == 9
+        assert feedback_response.json()["searchId"] == payload["searchId"]
 
 
 def test_search_supports_author_filter_and_detailed_history(tmp_path: Path):
@@ -206,6 +233,45 @@ def test_search_supports_author_filter_and_detailed_history(tmp_path: Path):
         assert history_payload["items"][0]["filters"]["documentType"] == "Relatorio"
         assert history_payload["items"][0]["filters"]["dateFrom"] == "2026-04-01"
         assert history_payload["items"][0]["filters"]["dateTo"] == "2026-04-30"
+
+
+def test_non_admin_cannot_mutate_documents_or_ingest_files(tmp_path: Path):
+    for client in _client_fixture(tmp_path):
+        admin_token = _login(client)
+        user_token = _login(client, "usuario@ifes.edu.br", "usuario123")
+        document = _upload_with_metadata(
+            client,
+            admin_token,
+            "portaria.txt",
+            b"conteudo administrativo do ifes",
+            category="administrativo",
+        )
+        user_headers = {"Authorization": f"Bearer {user_token}"}
+
+        upload_response = client.post(
+            "/api/v1/ingestion/upload",
+            headers=user_headers,
+            files={"file": ("indevido.txt", b"conteudo indevido", "text/plain")},
+            data={"category": "administrativo"},
+        )
+        update_response = client.put(
+            f"/api/v1/documents/{document['id']}",
+            headers=user_headers,
+            files={"file": ("alterado.txt", b"alteracao indevida", "text/plain")},
+        )
+        restore_response = client.post(
+            f"/api/v1/documents/{document['id']}/versions/1/restore",
+            headers=user_headers,
+        )
+        delete_response = client.delete(
+            f"/api/v1/documents/{document['id']}",
+            headers=user_headers,
+        )
+
+        assert upload_response.status_code == 403
+        assert update_response.status_code == 403
+        assert restore_response.status_code == 403
+        assert delete_response.status_code == 403
 
 
 def test_document_versioning_soft_delete_and_restore_keep_index_consistent(tmp_path: Path):

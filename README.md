@@ -148,6 +148,22 @@ O frontend fica em `interface-web/` e consome a API REST do sistema. Entre as re
 - Visualizacao de documentos
 - Relatorios e acompanhamento operacional
 
+## Execucao com Docker
+
+Antes de iniciar os containers, configure um segredo JWT aleatorio com pelo
+menos 32 caracteres e uma senha administrativa inicial forte com pelo menos
+12 caracteres. O ambiente falha ao iniciar se receber valores padrao ou
+curtos.
+
+```bash
+cp .env.example .env
+# Substitua SECRET_KEY e INITIAL_ADMIN_PASSWORD no arquivo .env.
+docker compose -f docker/docker-compose.yml up --build
+```
+
+Em volumes criados por versoes anteriores, altere imediatamente a senha do
+administrador ja armazenado ou recrie o banco de desenvolvimento.
+
 ## Evolucao Arquitetural
 
 O sistema foi desenhado para permitir expansoes sem ruptura do nucleo:

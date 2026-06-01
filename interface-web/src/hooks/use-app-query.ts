@@ -10,7 +10,7 @@ import {
   settingsService,
   userService,
 } from "@/lib/api/services";
-import type { SearchFilters, SearchHistoryFilters } from "@/types/app";
+import type { AdministrativeHistoryFilters, SearchFilters, SearchHistoryFilters } from "@/types/app";
 import type { MetricsReportFilters } from "@/types/app";
 
 export const useRecentSearches = () =>
@@ -89,10 +89,10 @@ export const useMetricCalculations = (limit = 10) =>
     queryFn: () => metricsService.calculations(limit),
   });
 
-export const useHistory = (enabled = true) =>
+export const useHistory = (filters: AdministrativeHistoryFilters = {}, enabled = true) =>
   useQuery({
-    queryKey: ["history"],
-    queryFn: () => historyService.list(),
+    queryKey: ["history", filters],
+    queryFn: () => historyService.list(filters),
     enabled,
   });
 

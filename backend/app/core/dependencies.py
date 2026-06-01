@@ -1,7 +1,7 @@
 # app/core/dependencies.py
 from collections.abc import Callable
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -10,6 +10,7 @@ from app.core.security import decode_token
 from app.domain.user import User
 from app.domain.user_role import UserRole
 from app.domain.user_session import UserSession
+from app.services.administrative_history_service import administrative_history_service
 from app.services.auth_service import AuthService
 
 security = HTTPBearer(auto_error=False)
@@ -77,8 +78,20 @@ def get_current_user(
 
 
 def require_roles(*allowed_roles: UserRole) -> Callable[[User], User]:
-    def dependency(current_user: User = Depends(get_current_user)) -> User:
+    def dependency(
+        request: Request,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> User:
         if current_user.perfil not in {role.value for role in allowed_roles}:
+            administrative_history_service.log_action(
+                db,
+                actor=current_user,
+                description=f"Tentativa de acesso não autorizado a {request.method} {request.url.path}.",
+                action_type="Acesso Negado",
+                entity_type="rota",
+                entity_id=0,
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Operação não permitida para o perfil do usuário.",

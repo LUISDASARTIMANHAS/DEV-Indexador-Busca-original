@@ -19,8 +19,10 @@ import {
 } from "@/lib/api/mock-data";
 import { appEnv } from "@/lib/env";
 import { storageKeys } from "@/lib/storage";
+import { buildTextPdfBlob } from "@/lib/pdf";
 import type {
   AppSettings,
+  AdministrativeHistoryFilters,
   AppNotification,
   BatchUploadPayload,
   BatchUploadResult,
@@ -37,6 +39,8 @@ import type {
   MetricsReportFilters,
   MetricsSnapshot,
   ReindexResult,
+  RelevanceFeedback,
+  RelevanceFeedbackPayload,
   SearchFilters,
   SearchHistoryFilters,
   SearchHistoryResponse,
@@ -228,6 +232,25 @@ export const searchService = {
         limit: filters.limit,
         page: filters.page,
       },
+    });
+  },
+};
+
+export const feedbackService = {
+  async submit(payload: RelevanceFeedbackPayload): Promise<RelevanceFeedback> {
+    if (shouldUseMocks()) {
+      await delay(120);
+      return {
+        id: Date.now(),
+        ...payload,
+        comment: payload.comment ?? null,
+        createdAt: new Date().toISOString(),
+      };
+    }
+
+    return apiRequest<RelevanceFeedback>("/api/v1/feedback", {
+      method: "POST",
+      body: payload,
     });
   },
 };
@@ -634,23 +657,21 @@ export const metricsService = {
   },
 
   async exportReport(
-    format: "csv" | "json",
+    format: "csv" | "pdf",
     filters: MetricsReportFilters = {},
   ): Promise<{ blob: Blob; filename: string | null }> {
     if (shouldUseMocks()) {
       await delay(180);
-      const content = format === "json"
-        ? JSON.stringify(mockMetricsReport, null, 2)
-        : [
+      const content = [
             "section,key,value",
             `summary,totalQueries,${mockMetricsReport.summary.totalQueries}`,
             `summary,mostFrequentQuery,${mockMetricsReport.summary.mostFrequentQuery ?? ""}`,
             `frequentQueries,${mockMetricsReport.frequentQueries[0]?.query ?? ""},${mockMetricsReport.frequentQueries[0]?.count ?? 0}`,
           ].join("\n");
       return {
-        blob: new Blob([content], {
-          type: format === "json" ? "application/json;charset=utf-8" : "text/csv;charset=utf-8",
-        }),
+        blob: format === "pdf"
+          ? buildTextPdfBlob(["Relatorio de busca", "", ...content.split("\n")])
+          : new Blob([content], { type: "text/csv;charset=utf-8" }),
         filename: `relatorio-busca-mock.${format}`,
       };
     }
@@ -666,13 +687,20 @@ export const metricsService = {
 };
 
 export const historyService = {
-  async list(): Promise<HistoryEntry[]> {
+  async list(filters: AdministrativeHistoryFilters = {}): Promise<HistoryEntry[]> {
     if (shouldUseMocks()) {
       await delay(150);
       return mockHistory;
     }
 
-    return apiRequest<HistoryEntry[]>("/api/v1/history");
+    return apiRequest<HistoryEntry[]>("/api/v1/history", {
+      query: {
+        userId: filters.userId,
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
+        limit: filters.limit,
+      },
+    });
   },
 };
 

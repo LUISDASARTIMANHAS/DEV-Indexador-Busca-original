@@ -708,6 +708,36 @@ class DocumentService:
     def list_ingestion_history(self, db: Session, limit: int = 20) -> list[dict]:
         return self.document_repository.list_ingestion_history(db, limit=limit)
 
+    def list_ingestion_history_entries(self, db: Session, limit: int = 20) -> list[dict]:
+        entries = [
+            (payload["uploaded_at"], self.to_history_response(payload))
+            for payload in self.list_ingestion_history(db, limit=limit)
+        ]
+        invalid_documents = (
+            db.query(InvalidDocument)
+            .order_by(
+                InvalidDocument.criado_em.desc(),
+                InvalidDocument.cod_documentos_invalidos.desc(),
+            )
+            .limit(limit)
+            .all()
+        )
+        entries.extend(
+            (
+                row.criado_em,
+                {
+                    "date": row.criado_em.strftime("%Y-%m-%d %H:%M") if row.criado_em else "",
+                    "file": row.nome_arquivo,
+                    "type": "Rejeitado",
+                    "result": "Falha",
+                    "details": row.motivo_erro,
+                },
+            )
+            for row in invalid_documents
+        )
+        entries.sort(key=lambda item: item[0] or datetime.min, reverse=True)
+        return [entry for _, entry in entries[:limit]]
+
     def list_batch_files(self, db: Session, limit: int = 10) -> list[dict]:
         return self.document_repository.list_batch_files(db, limit=limit)
 

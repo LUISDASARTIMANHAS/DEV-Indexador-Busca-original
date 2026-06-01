@@ -292,6 +292,16 @@ def test_metrics_report_persists_calculations_tracks_accesses_and_exports(tmp_pa
         assert csv_filename.endswith(".csv")
         assert csv_media_type == "text/csv; charset=utf-8"
 
+        pdf_content, pdf_filename, pdf_media_type = metrics_service.export_report(
+            db,
+            export_format="pdf",
+            date_from=date(2026, 5, 12),
+            date_to=date(2026, 5, 13),
+        )
+        assert pdf_content.startswith(b"%PDF-1.4")
+        assert pdf_filename.endswith(".pdf")
+        assert pdf_media_type == "application/pdf"
+
         json_content, json_filename, json_media_type = metrics_service.export_report(
             db,
             export_format="json",

@@ -50,7 +50,7 @@ def update_document(
     author: str | None = Form(default=None),
     document_type: str | None = Form(default=None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     payload = document_service.update_document(
         db,
@@ -115,7 +115,7 @@ def restore_document_version(
     document_id: int,
     version_number: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     payload = document_service.restore_version(
         db,
@@ -223,7 +223,7 @@ def export_document(
 def delete_document(
     document_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     return document_service.delete_document(
         db,

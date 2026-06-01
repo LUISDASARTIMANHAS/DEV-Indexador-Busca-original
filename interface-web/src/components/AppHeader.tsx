@@ -84,6 +84,7 @@ const quickSearchItems: QuickSearchItem[] = [
     description: "Ajustar parâmetros gerais do sistema",
     path: "/configuracoes",
     keywords: ["configuracoes", "ajustes", "preferencias"],
+    adminOnly: true,
     icon: Settings,
   },
   {
@@ -91,6 +92,7 @@ const quickSearchItems: QuickSearchItem[] = [
     description: "Configuração geral da identidade do sistema",
     path: "/configuracoes#instanceName",
     keywords: ["nome", "instancia", "ifesdoc", "geral"],
+    adminOnly: true,
     icon: SlidersHorizontal,
   },
   {
@@ -98,6 +100,7 @@ const quickSearchItems: QuickSearchItem[] = [
     description: "Configurar endereço do backend",
     path: "/configuracoes#apiBaseUrl",
     keywords: ["api", "url", "backend", "base"],
+    adminOnly: true,
     icon: SlidersHorizontal,
   },
   {
@@ -105,6 +108,7 @@ const quickSearchItems: QuickSearchItem[] = [
     description: "Ativar indexação após upload",
     path: "/configuracoes#autoIndexing",
     keywords: ["indexacao automatica", "upload", "automatico"],
+    adminOnly: true,
     icon: SlidersHorizontal,
   },
   {
@@ -112,6 +116,7 @@ const quickSearchItems: QuickSearchItem[] = [
     description: "Reconhecimento óptico em documentos digitalizados",
     path: "/configuracoes#ocrEnabled",
     keywords: ["ocr", "digitalizado", "reconhecimento"],
+    adminOnly: true,
     icon: SlidersHorizontal,
   },
   {
@@ -119,6 +124,7 @@ const quickSearchItems: QuickSearchItem[] = [
     description: "Limite de upload em MB",
     path: "/configuracoes#maxFileSizeMb",
     keywords: ["tamanho", "arquivo", "upload", "limite", "mb"],
+    adminOnly: true,
     icon: SlidersHorizontal,
   },
   {
@@ -126,6 +132,7 @@ const quickSearchItems: QuickSearchItem[] = [
     description: "Alertas de erros de indexação",
     path: "/configuracoes#emailNotifications",
     keywords: ["email", "notificacao", "alerta", "erro"],
+    adminOnly: true,
     icon: SlidersHorizontal,
   },
   {
@@ -133,6 +140,7 @@ const quickSearchItems: QuickSearchItem[] = [
     description: "Resumo periódico de atividades",
     path: "/configuracoes#weeklyReport",
     keywords: ["relatorio", "semanal", "resumo", "atividades"],
+    adminOnly: true,
     icon: SlidersHorizontal,
   },
 ];

@@ -17,6 +17,7 @@ class SearchResultResponse(BaseModel):
 
 
 class SearchResponse(BaseModel):
+    searchId: int | None = None
     query: str
     total: int
     page: int
