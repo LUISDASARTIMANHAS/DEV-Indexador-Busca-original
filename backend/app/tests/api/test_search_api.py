@@ -187,6 +187,57 @@ def test_search_returns_ranked_documents_and_recent_history(tmp_path: Path):
         assert feedback_response.json()["searchId"] == payload["searchId"]
 
 
+def test_search_analyze_endpoint_returns_query_analysis(tmp_path: Path):
+    for client in _client_fixture(tmp_path):
+        token = _login(client)
+
+        response = client.post(
+            "/api/v1/search/analyze",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"query": "relatórios de estágio 2025 PDF"},
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["raw_query"] == "relatórios de estágio 2025 PDF"
+        assert payload["normalized_query"] == "relatorios de estagio 2025 pdf"
+        assert payload["terms"] == ["relatorios", "estagio"]
+        assert payload["filters"]["year"] == 2025
+        assert payload["filters"]["type"] == "pdf"
+        assert payload["intent"] == "search_with_filters"
+        assert payload["is_valid"] is True
+
+
+def test_search_debug_analysis_includes_analyzer_summary(tmp_path: Path):
+    for client in _client_fixture(tmp_path):
+        token = _login(client)
+        _upload_with_metadata(
+            client,
+            token,
+            "relatorio-estagio-2025.txt",
+            b"Relatorio de estagio supervisionado do IFES em 2025.",
+            category="academico",
+            document_type="Relatorio",
+            document_date="2025-05-10",
+        )
+
+        response = client.get(
+            "/api/v1/search",
+            headers={"Authorization": f"Bearer {token}"},
+            params={
+                "q": "relatório de estágio 2025 txt",
+                "debug_analysis": "true",
+            },
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["analysis"]["terms"] == ["relatorio", "estagio"]
+        assert payload["analysis"]["filters"]["year"] == 2025
+        assert payload["analysis"]["filters"]["type"] == "txt"
+        assert payload["analysis"]["intent"] == "search_with_filters"
+
+
 def test_search_supports_author_filter_and_detailed_history(tmp_path: Path):
     for client in _client_fixture(tmp_path):
         token = _login(client)

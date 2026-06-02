@@ -23,6 +23,7 @@ export type SearchFilters = {
   mode?: SearchMode;
   textWeight?: number;
   semanticWeight?: number;
+  debugAnalysis?: boolean;
   limit?: number;
   page?: number;
 };
@@ -50,9 +51,28 @@ export type SearchResult = {
   matchedTerms?: string[];
 };
 
+export type QueryFilters = {
+  year?: number | null;
+  type?: string | null;
+  category?: string | null;
+  author?: string | null;
+  date_from?: string | null;
+  date_to?: string | null;
+};
+
+export type SearchAnalysis = {
+  terms: string[];
+  filters: QueryFilters;
+  phrases: string[];
+  excluded_terms: string[];
+  intent: string;
+  warnings: string[];
+};
+
 export type SearchResponse = {
   searchId: number | null;
   query: string;
+  analysis?: SearchAnalysis | null;
   mode?: SearchMode | string;
   searchMode?: SearchMode | string;
   total: number;

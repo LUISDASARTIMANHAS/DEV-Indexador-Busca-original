@@ -8,6 +8,8 @@ class QueryTokenizeStage(PipelineStage):
     """
 
     def execute(self, context: dict) -> dict:
+        if context.get("tokens"):
+            return context
 
         # Recupera o texto normalizado
         query = context.get("processed_query", "")

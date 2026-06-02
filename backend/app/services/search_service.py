@@ -10,12 +10,14 @@ from app.core.logging import logger
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.search_repository import SearchRepository
 from app.domain.user import User
+from app.schemas.query_schema import QueryAnalysisResult
+from app.services.query_analyzer_service import query_analyzer
 from app.services.semantic_search_service import semantic_search_service
 from app.strategies.bm25_strategy import BM25RankingStrategy
 from app.strategies.frequency_strategy import FrequencyRankingStrategy
 from app.strategies.hybrid_strategy import HybridRankingStrategy
 from app.strategies.tfidf_strategy import TFIDFRankingStrategy
-from app.utils.text_processing import normalize_text, preprocess_for_indexing
+from app.utils.text_processing import normalize_text
 
 
 class SearchService:
@@ -50,9 +52,11 @@ class SearchService:
         mode: str = "bm25",
         text_weight: float = 0.6,
         semantic_weight: float = 0.4,
+        debug_analysis: bool = False,
     ) -> dict:
         started_at = time.perf_counter()
         search_mode = self._normalize_mode(mode)
+        analysis = query_analyzer.analyze(query)
         logger.info(
             "Search started user_id=%s query=%s mode=%s category=%s document_type=%s author=%s date_from=%s date_to=%s sort_by=%s limit=%s page=%s",
             user_id,
@@ -67,16 +71,17 @@ class SearchService:
             limit,
             page,
         )
-        if not query or not query.strip():
+        if not analysis.is_valid:
             return self._empty_response(
                 query=query,
                 page=page,
                 per_page=limit,
                 response_time_ms=0,
                 mode=search_mode,
+                analysis=analysis if debug_analysis else None,
             )
 
-        terms = self._process_query(query)
+        terms = self._terms_for_retrieval(analysis)
         if not terms and search_mode not in {"semantic", "hybrid"}:
             response_time_ms = self._elapsed_response_time_ms(started_at)
             response = self._empty_response(
@@ -85,6 +90,7 @@ class SearchService:
                 per_page=limit,
                 response_time_ms=response_time_ms,
                 mode=search_mode,
+                analysis=analysis if debug_analysis else None,
             )
             response["searchId"] = self._register_search(
                 db,
@@ -106,6 +112,15 @@ class SearchService:
             )
             return response
 
+        category = category or analysis.filters.category
+        document_type = document_type or analysis.filters.type
+        author = author or analysis.filters.author
+        date_from = date_from or analysis.filters.date_from or (
+            f"{analysis.filters.year}-01-01" if analysis.filters.year else None
+        )
+        date_to = date_to or analysis.filters.date_to or (
+            f"{analysis.filters.year}-12-31" if analysis.filters.year else None
+        )
         normalized_date_from = self._coerce_date_boundary(date_from, end_of_day=False)
         normalized_date_to = self._coerce_date_boundary(date_to, end_of_day=True)
         ranked_items = self._rank_by_mode(
@@ -124,6 +139,10 @@ class SearchService:
             author=author,
             date_from=normalized_date_from,
             date_to=normalized_date_to,
+        )
+        ranked_payloads = self._remove_excluded_or_phrase_mismatches(
+            ranked_payloads,
+            analysis=analysis,
         )
         ranked_payloads = self._sort_ranked_payloads(ranked_payloads, sort_by=sort_by)
 
@@ -185,6 +204,8 @@ class SearchService:
             "items": items,
             "results": items,
         }
+        if debug_analysis:
+            response["analysis"] = self._analysis_summary(analysis)
         response["searchId"] = self._register_search(
             db,
             user_id=user_id,
@@ -215,12 +236,28 @@ class SearchService:
         )
         return response
 
-    def _process_query(self, query: str) -> list[str]:
-        preprocessed = preprocess_for_indexing(query)
-        if preprocessed["tokens"]:
-            return preprocessed["tokens"]
-        normalized_query = normalize_text(query)
-        return [token for token in normalized_query.split(" ") if token]
+    def analyze_query(self, query: str) -> QueryAnalysisResult:
+        return query_analyzer.analyze(query)
+
+    def _terms_for_retrieval(self, analysis: QueryAnalysisResult) -> list[str]:
+        phrase_terms = [
+            token
+            for phrase in analysis.phrases
+            for token in phrase.split(" ")
+            if token
+        ]
+        terms = sorted(set(analysis.terms + phrase_terms))
+        if terms:
+            return terms
+        return sorted(
+            {
+                token
+                for token in analysis.tokens
+                if token
+                and token != analysis.filters.type
+                and not token.isdigit()
+            }
+        )
 
     def _rank_by_mode(
         self,
@@ -548,6 +585,35 @@ class SearchService:
             for value in (document_type_value, format_value, file_name_value)
         )
 
+    def _remove_excluded_or_phrase_mismatches(
+        self,
+        ranked_payloads: list[dict],
+        *,
+        analysis: QueryAnalysisResult,
+    ) -> list[dict]:
+        if not analysis.excluded_terms and not analysis.phrases:
+            return ranked_payloads
+
+        filtered_payloads = []
+        for item in ranked_payloads:
+            searchable_text = normalize_text(self._searchable_result_text(item["payload"]))
+            if any(term in searchable_text.split(" ") for term in analysis.excluded_terms):
+                continue
+            if analysis.phrases and not all(phrase in searchable_text for phrase in analysis.phrases):
+                continue
+            filtered_payloads.append(item)
+        return filtered_payloads
+
+    def _analysis_summary(self, analysis: QueryAnalysisResult) -> dict:
+        return {
+            "terms": analysis.terms,
+            "filters": analysis.filters.model_dump(),
+            "phrases": analysis.phrases,
+            "excluded_terms": analysis.excluded_terms,
+            "intent": analysis.intent,
+            "warnings": analysis.warnings,
+        }
+
     def _sort_ranked_payloads(self, ranked_payloads: list[dict], *, sort_by: str | None) -> list[dict]:
         if sort_by == "data-desc":
             return sorted(
@@ -684,8 +750,9 @@ class SearchService:
         per_page: int,
         response_time_ms: int,
         mode: str,
+        analysis: QueryAnalysisResult | None = None,
     ) -> dict:
-        return {
+        response = {
             "searchId": None,
             "query": query,
             "mode": mode,
@@ -698,6 +765,9 @@ class SearchService:
             "items": [],
             "results": [],
         }
+        if analysis is not None:
+            response["analysis"] = self._analysis_summary(analysis)
+        return response
 
 
 search_service = SearchService(SearchRepository())

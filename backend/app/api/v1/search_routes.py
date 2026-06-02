@@ -8,6 +8,7 @@ from app.core.dependencies import get_current_user, require_roles
 from app.core.logging import logger
 from app.domain.user import User
 from app.domain.user_role import UserRole
+from app.schemas.query_schema import QueryAnalysisRequest, QueryAnalysisResult
 from app.schemas.search_schema import (
     SearchHistoryItemResponse,
     SearchHistoryListResponse,
@@ -39,6 +40,7 @@ def search_documents(
     semanticWeight: float | None = Query(default=None, ge=0, le=1),
     text_weight: float | None = Query(default=None, alias="text_weight", ge=0, le=1),
     semantic_weight: float | None = Query(default=None, alias="semantic_weight", ge=0, le=1),
+    debug_analysis: bool = Query(False),
     limit: int = Query(10, ge=1, le=100),
     page: int = Query(1, ge=1),
     db: Session = Depends(get_db),
@@ -81,9 +83,19 @@ def search_documents(
         mode=mode,
         text_weight=resolved_text_weight,
         semantic_weight=resolved_semantic_weight,
+        debug_analysis=debug_analysis,
         limit=limit,
         page=page,
     )
+
+
+@router.post("/analyze", response_model=QueryAnalysisResult)
+def analyze_search_query(
+    payload: QueryAnalysisRequest,
+    current_user: User = Depends(get_current_user),
+):
+    logger.info("Search query analysis requested by user=%s", current_user.email)
+    return search_service.analyze_query(payload.query)
 
 
 @router.post("/reindex")

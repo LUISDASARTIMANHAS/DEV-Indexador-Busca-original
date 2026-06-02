@@ -1,5 +1,7 @@
 from pydantic import BaseModel
 
+from app.schemas.query_schema import SearchAnalysisSummary
+
 
 class SearchResultResponse(BaseModel):
     id: int
@@ -31,6 +33,7 @@ class SearchResultResponse(BaseModel):
 class SearchResponse(BaseModel):
     searchId: int | None = None
     query: str
+    analysis: SearchAnalysisSummary | None = None
     mode: str | None = None
     searchMode: str | None = None
     total: int

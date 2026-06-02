@@ -70,6 +70,40 @@ const formatModeLabel = (value?: string) => {
 const formatScore = (value?: number) =>
   typeof value === "number" && Number.isFinite(value) ? value.toFixed(3) : "0.000";
 
+const formatIntentLabel = (value?: string) => {
+  switch (value) {
+    case "search_with_filters":
+      return "Busca com filtros";
+    case "open_document":
+      return "Abrir documento";
+    case "generate_report":
+      return "Relatório";
+    case "view_history":
+      return "Histórico";
+    case "reindex_document":
+      return "Reindexação";
+    case "search_documents":
+      return "Busca documental";
+    default:
+      return "Não classificada";
+  }
+};
+
+const buildAnalysisFilterLabels = (analysis?: { filters?: Record<string, string | number | null | undefined> | null }) => {
+  const filters = analysis?.filters;
+  if (!filters) {
+    return [];
+  }
+  const labels = [];
+  if (filters.year) labels.push(`Ano ${filters.year}`);
+  if (filters.type) labels.push(`Tipo ${String(filters.type).toUpperCase()}`);
+  if (filters.category) labels.push(`Categoria ${filters.category}`);
+  if (filters.author) labels.push(`Autor ${filters.author}`);
+  if (filters.date_from) labels.push(`Desde ${filters.date_from}`);
+  if (filters.date_to) labels.push(`Até ${filters.date_to}`);
+  return labels;
+};
+
 const saveBlob = (content: BlobPart, filename: string, type: string) => {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
@@ -142,6 +176,7 @@ const ResultsPage = () => {
     mode: (searchParams.get("mode") as SearchMode | null) || "bm25",
     textWeight: searchParams.get("textWeight") ? Number(searchParams.get("textWeight")) : undefined,
     semanticWeight: searchParams.get("semanticWeight") ? Number(searchParams.get("semanticWeight")) : undefined,
+    debugAnalysis: true,
   }), [currentPage, searchParams]);
   const { data, isLoading, isError, refetch } = useSearchResults(query, filters);
   const {
@@ -157,6 +192,7 @@ const ResultsPage = () => {
 
   const totalPages = data?.totalPages || 1;
   const hasResults = !!data && data.items.length > 0;
+  const analysisFilterLabels = buildAnalysisFilterLabels(data?.analysis);
 
   const goToPage = (page: number) => {
     const next = new URLSearchParams(searchParams);
@@ -280,6 +316,26 @@ const ResultsPage = () => {
                 {filters.sortBy && filters.sortBy !== "relevancia" && <Badge variant="outline">Ordenação: {formatSortLabel(filters.sortBy)}</Badge>}
                 {filters.mode === "hybrid" && filters.textWeight !== undefined && <Badge variant="outline">Textual: {filters.textWeight}</Badge>}
                 {filters.mode === "hybrid" && filters.semanticWeight !== undefined && <Badge variant="outline">Semântica: {filters.semanticWeight}</Badge>}
+              </div>
+            )}
+            {data.analysis && (
+              <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
+                <Badge variant="secondary">Modo: {formatIntentLabel(data.analysis.intent)}</Badge>
+                {data.analysis.terms.map((term) => (
+                  <Badge key={`term-${term}`} variant="outline">Termo: {term}</Badge>
+                ))}
+                {data.analysis.phrases.map((phrase) => (
+                  <Badge key={`phrase-${phrase}`} variant="outline">Frase: {phrase}</Badge>
+                ))}
+                {data.analysis.excluded_terms.map((term) => (
+                  <Badge key={`excluded-${term}`} variant="outline">Exclui: {term}</Badge>
+                ))}
+                {analysisFilterLabels.map((label) => (
+                  <Badge key={label} variant="outline">{label}</Badge>
+                ))}
+                {data.analysis.warnings.map((warning) => (
+                  <Badge key={warning} variant="destructive">{warning}</Badge>
+                ))}
               </div>
             )}
           </div>

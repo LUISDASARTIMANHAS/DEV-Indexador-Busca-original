@@ -8,6 +8,8 @@ class QueryPreprocessStage(PipelineStage):
     
     '''
     def execute(self, context: dict) -> dict:
+        if context.get("processed_query"):
+            return context
 
         # Obtém a consulta digitada pelo usuário
         query = context.get("query", "")

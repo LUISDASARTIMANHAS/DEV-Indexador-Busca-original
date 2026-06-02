@@ -206,6 +206,7 @@ export const searchService = {
         mode: filters.mode,
         textWeight: filters.textWeight,
         semanticWeight: filters.semanticWeight,
+        debug_analysis: filters.debugAnalysis,
         limit: filters.limit,
         page: filters.page,
       },

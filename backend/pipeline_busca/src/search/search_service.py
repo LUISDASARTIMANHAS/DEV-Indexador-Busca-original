@@ -1,5 +1,6 @@
 from pipeline_busca.src.pipeline.search_pipeline import SearchPipeline
 from pipeline_busca.src.stages.queryPreprocessStage import QueryPreprocessStage
+from pipeline_busca.src.stages.queryAnalyzeStage import QueryAnalyzeStage
 from pipeline_busca.src.stages.searchIndexStage import SearchIndexStage
 from pipeline_busca.src.stages.rankResultsStage import RankResultsStage
 from pipeline_busca.src.storage.index_repository import IndexRepository
@@ -22,6 +23,7 @@ class SearchService:
         self.pipeline = SearchPipeline()
 
         # Adiciona as etapas ao pipeline
+        self.pipeline.add_stage(QueryAnalyzeStage())
         self.pipeline.add_stage(QueryPreprocessStage())
         self.pipeline.add_stage(QueryTokenizeStage())
         self.pipeline.add_stage(SearchIndexStage(self.repository))
