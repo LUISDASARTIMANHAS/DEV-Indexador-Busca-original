@@ -107,6 +107,22 @@ class DocumentRepository:
         )
         return [cls._row_to_payload(row) for row in rows]
 
+    @classmethod
+    def list_active_document_payloads(cls, db: Session) -> list[dict]:
+        rows = (
+            cls._history_query(db, active_only=True)
+            .order_by(Document.cod_documento.asc(), IngestionHistory.criado_em.desc())
+            .all()
+        )
+        payloads: list[dict] = []
+        seen_ids: set[int] = set()
+        for row in rows:
+            if row.id in seen_ids:
+                continue
+            seen_ids.add(row.id)
+            payloads.append(cls._row_to_payload(row))
+        return payloads
+
     @staticmethod
     def _row_to_payload(row) -> dict:
         fallback_file_name = f"{row.title}.{str(row.type).lower()}"

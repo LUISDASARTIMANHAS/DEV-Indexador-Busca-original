@@ -29,6 +29,7 @@ from app.domain.inverted_index import InvertedIndex
 from app.domain.metric_calculation import MetricCalculation
 from app.domain.invalid_document import InvalidDocument
 from app.domain.document import Document
+from app.domain.document_embedding import DocumentEmbedding
 from app.domain.notification import Notification
 from app.domain.search_history import SearchHistory
 from app.domain.relevance_feedback import RelevanceFeedback

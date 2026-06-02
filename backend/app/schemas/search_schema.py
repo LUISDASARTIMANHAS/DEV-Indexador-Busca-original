@@ -3,6 +3,8 @@ from pydantic import BaseModel
 
 class SearchResultResponse(BaseModel):
     id: int
+    documentId: int | None = None
+    document_id: int | None = None
     title: str
     snippet: str
     category: str
@@ -14,17 +16,30 @@ class SearchResultResponse(BaseModel):
     size: str
     date: str
     relevance: int
+    textualScore: float | None = None
+    semanticScore: float | None = None
+    finalScore: float | None = None
+    searchMode: str | None = None
+    matchedTerms: list[str] | None = None
+    textual_score: float | None = None
+    semantic_score: float | None = None
+    final_score: float | None = None
+    search_mode: str | None = None
+    matched_terms: list[str] | None = None
 
 
 class SearchResponse(BaseModel):
     searchId: int | None = None
     query: str
+    mode: str | None = None
+    searchMode: str | None = None
     total: int
     page: int
     perPage: int
     totalPages: int
     responseTimeMs: int
     items: list[SearchResultResponse]
+    results: list[SearchResultResponse] | None = None
 
 
 class SearchHistoryItemResponse(BaseModel):
@@ -39,6 +54,9 @@ class SearchHistoryFiltersResponse(BaseModel):
     dateFrom: str | None = None
     dateTo: str | None = None
     sortBy: str | None = None
+    searchMode: str | None = None
+    textWeight: str | None = None
+    semanticWeight: str | None = None
 
 
 class SearchHistoryEntryResponse(BaseModel):

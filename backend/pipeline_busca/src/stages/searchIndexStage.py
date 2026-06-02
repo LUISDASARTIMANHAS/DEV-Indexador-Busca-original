@@ -18,7 +18,11 @@ class SearchIndexStage(PipelineStage):
         # Obtém os tokens da consulta
         tokens = context.get("tokens", [])
 
-        documents = self.repository.search_tokens(tokens)
+        if hasattr(self.repository, "documents_for_tokens"):
+            documents = self.repository.documents_for_tokens(tokens)
+            context["index_data"] = self.repository.collection_statistics()
+        else:
+            documents = self.repository.search_tokens(tokens)
 
         # Armazena os documentos encontrados no contexto
         context["documents"] = documents

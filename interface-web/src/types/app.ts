@@ -20,12 +20,18 @@ export type SearchFilters = {
   dateFrom?: string;
   dateTo?: string;
   sortBy?: string;
+  mode?: SearchMode;
+  textWeight?: number;
+  semanticWeight?: number;
   limit?: number;
   page?: number;
 };
 
+export type SearchMode = "frequency" | "tfidf" | "bm25" | "semantic" | "hybrid";
+
 export type SearchResult = {
   id: number;
+  documentId?: number;
   title: string;
   snippet: string;
   category: string;
@@ -37,17 +43,25 @@ export type SearchResult = {
   size: string;
   date: string;
   relevance: number;
+  textualScore?: number;
+  semanticScore?: number;
+  finalScore?: number;
+  searchMode?: SearchMode | string;
+  matchedTerms?: string[];
 };
 
 export type SearchResponse = {
   searchId: number | null;
   query: string;
+  mode?: SearchMode | string;
+  searchMode?: SearchMode | string;
   total: number;
   page: number;
   perPage: number;
   totalPages: number;
   responseTimeMs: number;
   items: SearchResult[];
+  results?: SearchResult[];
 };
 
 export type RelevanceFeedbackPayload = {

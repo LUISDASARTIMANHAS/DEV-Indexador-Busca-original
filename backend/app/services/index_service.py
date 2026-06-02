@@ -21,6 +21,7 @@ from app.exceptions.document_exceptions import DocumentNotFoundException
 from app.pipeline.document_ingestion_pipeline import DocumentIngestionPipeline
 from app.pipeline.stages import (
     RelationalIndexPersistStage,
+    SemanticEmbeddingPersistStage,
     TextPreprocessStage,
     TextTokenizeStage,
 )
@@ -37,6 +38,7 @@ class IndexService:
                 TextPreprocessStage(),
                 TextTokenizeStage(),
                 RelationalIndexPersistStage(),
+                SemanticEmbeddingPersistStage(),
             ]
         )
 

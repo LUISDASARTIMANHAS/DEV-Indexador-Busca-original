@@ -149,6 +149,20 @@ def test_search_returns_ranked_documents_and_recent_history(tmp_path: Path):
         assert payload["items"][0]["relevance"] >= payload["items"][-1]["relevance"]
         assert payload["items"][0]["type"] == "TXT"
 
+        hybrid_payload = _search(
+            client,
+            token,
+            "pesquisa ifes",
+            mode="hybrid",
+            textWeight=0.7,
+            semanticWeight=0.3,
+        )
+        assert hybrid_payload["mode"] == "hybrid"
+        assert hybrid_payload["items"][0]["searchMode"] == "hybrid"
+        assert "textualScore" in hybrid_payload["items"][0]
+        assert "semanticScore" in hybrid_payload["items"][0]
+        assert "finalScore" in hybrid_payload["items"][0]
+
         history_response = client.get(
             "/api/v1/search/history",
             headers={"Authorization": f"Bearer {token}"},

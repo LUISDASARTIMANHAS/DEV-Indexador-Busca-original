@@ -170,6 +170,20 @@ CREATE TABLE IF NOT EXISTS historico_documento (
         CHECK (numero_versao >= 1)
 );
 
+CREATE TABLE IF NOT EXISTS documento_embedding (
+    cod_embedding BIGSERIAL PRIMARY KEY,
+    cod_documento BIGINT NOT NULL,
+    versao_documento BIGINT,
+    modelo_embedding VARCHAR(255) NOT NULL,
+    embedding JSONB NOT NULL,
+    criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_documento_embedding_documento
+        FOREIGN KEY (cod_documento)
+        REFERENCES documento (cod_documento),
+    CONSTRAINT uq_documento_embedding_documento_versao_modelo
+        UNIQUE (cod_documento, versao_documento, modelo_embedding)
+);
+
 CREATE TABLE IF NOT EXISTS documento_metadado (
     cod_documento_metadado BIGSERIAL PRIMARY KEY,
     cod_documento BIGINT NOT NULL,
@@ -330,6 +344,12 @@ CREATE INDEX IF NOT EXISTS idx_historico_documento_documento
 
 CREATE INDEX IF NOT EXISTS idx_historico_documento_usuario
     ON historico_documento (cod_usuario);
+
+CREATE INDEX IF NOT EXISTS idx_documento_embedding_documento
+    ON documento_embedding (cod_documento);
+
+CREATE INDEX IF NOT EXISTS idx_documento_embedding_modelo
+    ON documento_embedding (modelo_embedding);
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_historico_documento_versao_ativa
     ON historico_documento (cod_documento)

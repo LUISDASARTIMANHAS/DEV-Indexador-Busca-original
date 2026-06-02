@@ -11,7 +11,7 @@ import { useDocument, useDocumentVersions, useSearchResults } from "@/hooks/use-
 import { useToast } from "@/hooks/use-toast";
 import { feedbackService } from "@/lib/api/services";
 import { buildTextPdfBlob } from "@/lib/pdf";
-import type { SearchResult } from "@/types/app";
+import type { SearchMode, SearchResult } from "@/types/app";
 
 const csvEscape = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
 
@@ -51,6 +51,25 @@ const formatSortLabel = (value: string) => {
   }
 };
 
+const formatModeLabel = (value?: string) => {
+  switch (value) {
+    case "frequency":
+      return "Frequência";
+    case "tfidf":
+      return "TF-IDF";
+    case "semantic":
+      return "Semântica";
+    case "hybrid":
+      return "Híbrida";
+    case "bm25":
+    default:
+      return "BM25";
+  }
+};
+
+const formatScore = (value?: number) =>
+  typeof value === "number" && Number.isFinite(value) ? value.toFixed(3) : "0.000";
+
 const saveBlob = (content: BlobPart, filename: string, type: string) => {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
@@ -64,7 +83,7 @@ const saveBlob = (content: BlobPart, filename: string, type: string) => {
 };
 
 const buildResultsCsv = (query: string, items: SearchResult[]) => {
-  const header = ["consulta", "id", "titulo", "autor", "arquivo", "categoria", "tipo", "formato", "tamanho", "data", "relevancia", "trecho"];
+  const header = ["consulta", "id", "titulo", "autor", "arquivo", "categoria", "tipo", "formato", "tamanho", "data", "relevancia", "score_textual", "score_semantico", "score_final", "modo", "termos", "trecho"];
   const rows = items.map((item) => [
     query,
     item.id,
@@ -77,6 +96,11 @@ const buildResultsCsv = (query: string, items: SearchResult[]) => {
     item.size,
     item.date,
     item.relevance,
+    item.textualScore ?? 0,
+    item.semanticScore ?? 0,
+    item.finalScore ?? 0,
+    item.searchMode ?? "",
+    item.matchedTerms?.join(" ") ?? "",
     stripHtml(item.snippet),
   ]);
 
@@ -115,6 +139,9 @@ const ResultsPage = () => {
     dateFrom: searchParams.get("dateFrom") || undefined,
     dateTo: searchParams.get("dateTo") || undefined,
     sortBy: searchParams.get("sortBy") || undefined,
+    mode: (searchParams.get("mode") as SearchMode | null) || "bm25",
+    textWeight: searchParams.get("textWeight") ? Number(searchParams.get("textWeight")) : undefined,
+    semanticWeight: searchParams.get("semanticWeight") ? Number(searchParams.get("semanticWeight")) : undefined,
   }), [currentPage, searchParams]);
   const { data, isLoading, isError, refetch } = useSearchResults(query, filters);
   const {
@@ -154,11 +181,12 @@ const ResultsPage = () => {
     }
     const lines = [
       `Resultados da busca: ${query}`,
+      `Modo: ${formatModeLabel(data.searchMode || data.mode || filters.mode)}`,
       `Total de documentos: ${data.total}`,
       "",
       ...data.items.flatMap((item, index) => [
         `${index + 1}. ${item.title}`,
-        `${item.author} | ${item.category} | ${item.documentType} | Relevancia ${item.relevance}%`,
+        `${item.author} | ${item.category} | ${item.documentType} | Relevancia ${item.relevance}% | Score ${formatScore(item.finalScore)}`,
         stripHtml(item.snippet),
         "",
       ]),
@@ -236,19 +264,22 @@ const ResultsPage = () => {
             <h1 className="text-xl font-semibold text-foreground">Resultados da busca</h1>
             <p className="text-sm text-muted-foreground">
               {hasResults ? (
-                <>{data.total} documentos encontrados para "<span className="font-medium text-foreground">{query}</span>" ({data.responseTimeMs}ms)</>
+                <>{data.total} documentos encontrados para "<span className="font-medium text-foreground">{query}</span>" em {formatModeLabel(data.searchMode || data.mode || filters.mode)} ({data.responseTimeMs}ms)</>
               ) : (
-                <>Nenhum resultado para "<span className="font-medium text-foreground">{query}</span>" ({data.responseTimeMs}ms)</>
+                <>Nenhum resultado para "<span className="font-medium text-foreground">{query}</span>" em {formatModeLabel(data.searchMode || data.mode || filters.mode)} ({data.responseTimeMs}ms)</>
               )}
             </p>
-            {(filters.category || filters.documentType || filters.author || filters.dateFrom || filters.dateTo || filters.sortBy) && (
+            {(filters.category || filters.documentType || filters.author || filters.dateFrom || filters.dateTo || filters.sortBy || filters.mode) && (
               <div className="flex flex-wrap gap-2 mt-3">
+                {filters.mode && <Badge variant="secondary">Modo: {formatModeLabel(filters.mode)}</Badge>}
                 {filters.category && <Badge variant="secondary">Categoria: {filters.category}</Badge>}
                 {filters.documentType && <Badge variant="secondary">Tipo/Formato: {filters.documentType}</Badge>}
                 {filters.author && <Badge variant="secondary">Autor: {filters.author}</Badge>}
                 {filters.dateFrom && <Badge variant="outline">Publicado após: {filters.dateFrom}</Badge>}
                 {filters.dateTo && <Badge variant="outline">Publicado até: {filters.dateTo}</Badge>}
                 {filters.sortBy && filters.sortBy !== "relevancia" && <Badge variant="outline">Ordenação: {formatSortLabel(filters.sortBy)}</Badge>}
+                {filters.mode === "hybrid" && filters.textWeight !== undefined && <Badge variant="outline">Textual: {filters.textWeight}</Badge>}
+                {filters.mode === "hybrid" && filters.semanticWeight !== undefined && <Badge variant="outline">Semântica: {filters.semanticWeight}</Badge>}
               </div>
             )}
           </div>
@@ -317,6 +348,13 @@ const ResultsPage = () => {
                         <Progress value={doc.relevance} className="w-16 h-1.5" />
                         <span className="font-medium text-foreground">{doc.relevance}%</span>
                       </span>
+                      <Badge variant="outline" className="text-xs px-2 py-0">Score {formatScore(doc.finalScore)}</Badge>
+                      {(doc.searchMode === "hybrid" || doc.searchMode === "semantic") && (
+                        <Badge variant="outline" className="text-xs px-2 py-0">Semântico {formatScore(doc.semanticScore)}</Badge>
+                      )}
+                      {(doc.searchMode === "hybrid" || doc.searchMode === "frequency" || doc.searchMode === "tfidf" || doc.searchMode === "bm25") && (
+                        <Badge variant="outline" className="text-xs px-2 py-0">Textual {formatScore(doc.textualScore)}</Badge>
+                      )}
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-border pt-3">
                       <span className="mr-2 text-xs text-muted-foreground">Avaliar relevância</span>

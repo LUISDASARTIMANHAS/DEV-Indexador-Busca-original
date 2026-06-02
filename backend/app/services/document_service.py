@@ -16,6 +16,7 @@ from app.adapters.document_adapter_registry import document_adapter_registry
 from app.core.config import settings
 from app.domain.document import Document
 from app.domain.document_access_history import DocumentAccessHistory
+from app.domain.document_embedding import DocumentEmbedding
 from app.domain.document_category import DocumentCategory
 from app.domain.document_history import DocumentHistory
 from app.domain.document_metadata import DocumentMetadata
@@ -406,6 +407,9 @@ class DocumentService:
         ).delete(synchronize_session=False)
         db.query(DocumentAccessHistory).filter(
             DocumentAccessHistory.cod_documento == document_id
+        ).delete(synchronize_session=False)
+        db.query(DocumentEmbedding).filter(
+            DocumentEmbedding.cod_documento == document_id
         ).delete(synchronize_session=False)
         db.query(DocumentMetadata).filter(
             DocumentMetadata.cod_documento == document_id

@@ -133,9 +133,14 @@ export const mockSearch = (
     author?: string;
     dateFrom?: string;
     dateTo?: string;
+    mode?: string;
+    textWeight?: number;
+    semanticWeight?: number;
   } = {},
 ): SearchResponse => {
   const normalized = normalizeMockText(query.trim());
+  const mode = filters.mode || "bm25";
+  const queryTerms = normalized.split(/\s+/).filter(Boolean);
   const filtered = normalized === "xyz123"
     ? []
     : allSearchResults.filter((result) => {
@@ -176,16 +181,41 @@ export const mockSearch = (
   const totalPages = Math.max(1, Math.ceil(total / perPage));
   const safePage = Math.min(Math.max(page, 1), totalPages);
   const start = (safePage - 1) * perPage;
+  const items = filtered.slice(start, start + perPage).map((result, index) => {
+    const baseScore = Math.max(result.relevance / 100, 0.01);
+    const textualScore = mode === "semantic" ? 0 : baseScore * (1 + index * 0.02);
+    const semanticScore = mode === "frequency" || mode === "tfidf" || mode === "bm25"
+      ? 0
+      : Math.max(0.1, baseScore - index * 0.03);
+    const finalScore = mode === "hybrid"
+      ? ((filters.textWeight ?? 0.6) * textualScore) + ((filters.semanticWeight ?? 0.4) * semanticScore)
+      : mode === "semantic"
+        ? semanticScore
+        : textualScore;
+
+    return {
+      ...result,
+      documentId: result.id,
+      textualScore,
+      semanticScore,
+      finalScore,
+      searchMode: mode,
+      matchedTerms: queryTerms,
+    };
+  });
 
   return {
     searchId: 500 + safePage,
     query,
+    mode,
+    searchMode: mode,
     total,
     page: safePage,
     perPage,
     totalPages,
     responseTimeMs: 150 + Math.floor(Math.random() * 100),
-    items: filtered.slice(start, start + perPage),
+    items,
+    results: items,
   };
 };
 

@@ -27,7 +27,7 @@ class SearchService:
         self.pipeline.add_stage(SearchIndexStage(self.repository))
         self.pipeline.add_stage(RankResultsStage())
 
-    def search(self, query: str, limit: int = 10):
+    def search(self, query: str, limit: int = 10, mode: str = "frequency"):
 
         """
         Executa uma busca no sistema.
@@ -40,7 +40,8 @@ class SearchService:
         # Executa o pipeline de busca
         result = self.pipeline.run({
             "query": query,
-            "limit": limit
+            "limit": limit,
+            "mode": mode
         })
 
         # Retorna apenas os resultados

@@ -10,7 +10,11 @@ from app.core.logging import logger
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.search_repository import SearchRepository
 from app.domain.user import User
-from app.strategies.search_ranking_strategy import SearchRankingStrategy
+from app.services.semantic_search_service import semantic_search_service
+from app.strategies.bm25_strategy import BM25RankingStrategy
+from app.strategies.frequency_strategy import FrequencyRankingStrategy
+from app.strategies.hybrid_strategy import HybridRankingStrategy
+from app.strategies.tfidf_strategy import TFIDFRankingStrategy
 from app.utils.text_processing import normalize_text, preprocess_for_indexing
 
 
@@ -21,7 +25,13 @@ class SearchService:
     def __init__(self, repository: SearchRepository):
         self.repository = repository
         self.document_repository = DocumentRepository()
-        self.ranking_strategy = SearchRankingStrategy()
+        self.semantic_search_service = semantic_search_service
+        self.textual_strategies = {
+            "frequency": FrequencyRankingStrategy(),
+            "tfidf": TFIDFRankingStrategy(),
+            "bm25": BM25RankingStrategy(),
+        }
+        self.hybrid_strategy = HybridRankingStrategy()
 
     def search(
         self,
@@ -37,12 +47,17 @@ class SearchService:
         date_from: date | str | None = None,
         date_to: date | str | None = None,
         sort_by: str | None = None,
+        mode: str = "bm25",
+        text_weight: float = 0.6,
+        semantic_weight: float = 0.4,
     ) -> dict:
         started_at = time.perf_counter()
+        search_mode = self._normalize_mode(mode)
         logger.info(
-            "Search started user_id=%s query=%s category=%s document_type=%s author=%s date_from=%s date_to=%s sort_by=%s limit=%s page=%s",
+            "Search started user_id=%s query=%s mode=%s category=%s document_type=%s author=%s date_from=%s date_to=%s sort_by=%s limit=%s page=%s",
             user_id,
             query,
+            search_mode,
             category,
             document_type,
             author,
@@ -58,16 +73,18 @@ class SearchService:
                 page=page,
                 per_page=limit,
                 response_time_ms=0,
+                mode=search_mode,
             )
 
         terms = self._process_query(query)
-        if not terms:
+        if not terms and search_mode not in {"semantic", "hybrid"}:
             response_time_ms = self._elapsed_response_time_ms(started_at)
             response = self._empty_response(
                 query=query,
                 page=page,
                 per_page=limit,
                 response_time_ms=response_time_ms,
+                mode=search_mode,
             )
             response["searchId"] = self._register_search(
                 db,
@@ -80,6 +97,9 @@ class SearchService:
                     date_from,
                     date_to,
                     sort_by,
+                    search_mode,
+                    text_weight,
+                    semantic_weight,
                 ),
                 result_count=0,
                 response_time_ms=response_time_ms,
@@ -88,15 +108,13 @@ class SearchService:
 
         normalized_date_from = self._coerce_date_boundary(date_from, end_of_day=False)
         normalized_date_to = self._coerce_date_boundary(date_to, end_of_day=True)
-        rows = self.repository.search_terms(
+        ranked_items = self._rank_by_mode(
             db,
+            query=query,
             terms=terms,
-        )
-
-        ranked_items = self.ranking_strategy.rank(
-            rows,
-            terms,
-            raw_query=query,
+            mode=search_mode,
+            text_weight=text_weight,
+            semantic_weight=semantic_weight,
         )
         ranked_payloads = self._load_ranked_payloads(
             db,
@@ -112,19 +130,25 @@ class SearchService:
         start = max((page - 1) * limit, 0)
         end = start + limit
         paginated = ranked_payloads[start:end]
-        top_score = ranked_payloads[0]["score"] if ranked_payloads else 0
+        top_score = ranked_payloads[0]["final_score"] if ranked_payloads else 0
         items = []
 
         for item in paginated:
             payload = item["payload"]
             snippet_source = self._searchable_result_text(payload)
+            textual_score = float(item.get("textual_score", 0.0) or 0.0)
+            semantic_score = float(item.get("semantic_score", 0.0) or 0.0)
+            final_score = float(item.get("final_score", item.get("score", 0.0)) or 0.0)
+            matched_terms = sorted(item["matched_terms"])
             items.append(
                 {
                     "id": payload["id"],
+                    "documentId": payload["id"],
+                    "document_id": payload["id"],
                     "title": payload["title"],
                     "snippet": self._build_snippet(
                         snippet_source,
-                        sorted(item["matched_terms"]),
+                        matched_terms,
                     ),
                     "category": payload["category"],
                     "type": payload["type"],
@@ -134,19 +158,32 @@ class SearchService:
                     "mimeType": payload["mime_type"] or "",
                     "size": self._format_size(payload["size_bytes"]),
                     "date": self._effective_document_date(payload).isoformat(),
-                    "relevance": self._normalize_relevance(item["score"], top_score),
+                    "relevance": self._normalize_relevance(final_score, top_score),
+                    "textualScore": textual_score,
+                    "semanticScore": semantic_score,
+                    "finalScore": final_score,
+                    "searchMode": search_mode,
+                    "matchedTerms": matched_terms,
+                    "textual_score": textual_score,
+                    "semantic_score": semantic_score,
+                    "final_score": final_score,
+                    "search_mode": search_mode,
+                    "matched_terms": matched_terms,
                 }
             )
 
         response_time_ms = self._elapsed_response_time_ms(started_at)
         response = {
             "query": query,
+            "mode": search_mode,
+            "searchMode": search_mode,
             "total": len(ranked_payloads),
             "page": page,
             "perPage": limit,
             "totalPages": max(math.ceil(len(ranked_payloads) / limit), 1),
             "responseTimeMs": response_time_ms,
             "items": items,
+            "results": items,
         }
         response["searchId"] = self._register_search(
             db,
@@ -159,14 +196,18 @@ class SearchService:
                 date_from,
                 date_to,
                 sort_by,
+                search_mode,
+                text_weight,
+                semantic_weight,
             ),
             result_count=len(ranked_payloads),
             response_time_ms=response_time_ms,
         )
         logger.info(
-            "Search completed user_id=%s query=%s total=%s page=%s per_page=%s response_time_ms=%s",
+            "Search completed user_id=%s query=%s mode=%s total=%s page=%s per_page=%s response_time_ms=%s",
             user_id,
             query,
+            search_mode,
             len(ranked_payloads),
             page,
             limit,
@@ -180,6 +221,122 @@ class SearchService:
             return preprocessed["tokens"]
         normalized_query = normalize_text(query)
         return [token for token in normalized_query.split(" ") if token]
+
+    def _rank_by_mode(
+        self,
+        db: Session,
+        *,
+        query: str,
+        terms: list[str],
+        mode: str,
+        text_weight: float,
+        semantic_weight: float,
+    ) -> list[dict]:
+        if mode == "semantic":
+            return self.semantic_search_service.search(db, query=query)
+
+        if mode == "hybrid":
+            textual_items = self._rank_textual(db, terms=terms, mode="bm25") if terms else []
+            semantic_items = self.semantic_search_service.search(db, query=query)
+            return self.hybrid_strategy.rank(
+                terms,
+                [],
+                index_data={
+                    "textual_scores": self._score_map(textual_items, "textual_score"),
+                    "semantic_scores": self._score_map(semantic_items, "semantic_score"),
+                    "matched_terms": self._matched_terms_map(textual_items),
+                },
+                options={
+                    "text_weight": text_weight,
+                    "semantic_weight": semantic_weight,
+                },
+            )
+
+        return self._rank_textual(db, terms=terms, mode=mode)
+
+    def _rank_textual(self, db: Session, *, terms: list[str], mode: str) -> list[dict]:
+        if not terms:
+            return []
+        rows = self.repository.search_terms(db, terms=terms)
+        documents = self._build_strategy_documents(rows)
+        strategy = self.textual_strategies.get(mode) or self.textual_strategies["bm25"]
+        return strategy.rank(
+            terms,
+            documents,
+            index_data={
+                "total_documents": self.repository.count_active_documents(db),
+                "average_document_length": self._average_document_length(documents),
+            },
+        )
+
+    def _build_strategy_documents(self, rows: list) -> list[dict]:
+        documents: dict[int, dict] = {}
+        seen_fields: set[tuple[int, int | str]] = set()
+
+        for row in rows:
+            document_id = int(row.document_id)
+            document = documents.setdefault(
+                document_id,
+                {
+                    "document_id": document_id,
+                    "title": row.title or "",
+                    "document_date": row.document_date,
+                    "terms": {},
+                    "document_length": 0,
+                },
+            )
+            field_id = getattr(row, "field_id", None) or f"{getattr(row, 'field_type', 'conteudo')}-{row.term}"
+            field_key = (document_id, field_id)
+            if field_key not in seen_fields:
+                field_content = getattr(row, "field_content", "") or ""
+                document["document_length"] += len(field_content.split())
+                seen_fields.add(field_key)
+
+            term_entry = document["terms"].setdefault(
+                row.term,
+                {
+                    "tf": 0,
+                    "df": int(getattr(row, "df", 0) or 0),
+                    "positions": [],
+                    "field_types": set(),
+                },
+            )
+            term_entry["tf"] += int(row.tf or 0)
+            term_entry["df"] = max(term_entry["df"], int(getattr(row, "df", 0) or 0))
+            term_entry["positions"].append(int(row.posicao_inicial or 0))
+            term_entry["field_types"].add(getattr(row, "field_type", "conteudo") or "conteudo")
+
+        for document in documents.values():
+            if document["document_length"] <= 0:
+                document["document_length"] = sum(
+                    int(entry.get("tf") or 0)
+                    for entry in document["terms"].values()
+                )
+
+        return list(documents.values())
+
+    def _average_document_length(self, documents: list[dict]) -> float:
+        if not documents:
+            return 0.0
+        return sum(int(document.get("document_length") or 0) for document in documents) / len(documents)
+
+    def _score_map(self, ranked_items: list[dict], score_key: str) -> dict[int, float]:
+        return {
+            int(item["document_id"]): float(item.get(score_key, item.get("score", 0.0)) or 0.0)
+            for item in ranked_items
+        }
+
+    def _matched_terms_map(self, ranked_items: list[dict]) -> dict[int, set[str]]:
+        return {
+            int(item["document_id"]): set(item.get("matched_terms", set()))
+            for item in ranked_items
+        }
+
+    def _normalize_mode(self, mode: str | None) -> str:
+        normalized_mode = normalize_text(mode or "bm25")
+        if normalized_mode in self.textual_strategies or normalized_mode in {"semantic", "hybrid"}:
+            return normalized_mode
+        return "bm25"
 
     def list_recent_searches(self, db: Session, *, user_id: int, limit: int = 10) -> list[dict]:
         rows = self.repository.list_recent_searches(db, user_id=user_id, limit=limit)
@@ -342,8 +499,11 @@ class SearchService:
             ranked_payloads.append(
                 {
                     "document_id": item["document_id"],
-                    "score": item["score"],
-                    "matched_terms": item["matched_terms"],
+                    "score": item.get("score", item.get("final_score", 0.0)),
+                    "textual_score": item.get("textual_score", 0.0),
+                    "semantic_score": item.get("semantic_score", 0.0),
+                    "final_score": item.get("final_score", item.get("score", 0.0)),
+                    "matched_terms": set(item.get("matched_terms", set())),
                     "payload": payload,
                 }
             )
@@ -394,7 +554,7 @@ class SearchService:
                 ranked_payloads,
                 key=lambda item: (
                     self._effective_document_date(item["payload"]),
-                    item["score"],
+                    item["final_score"],
                 ),
                 reverse=True,
             )
@@ -403,7 +563,7 @@ class SearchService:
                 ranked_payloads,
                 key=lambda item: (
                     self._effective_document_date(item["payload"]),
-                    -item["score"],
+                    -item["final_score"],
                 ),
             )
         if sort_by == "titulo":
@@ -411,7 +571,7 @@ class SearchService:
                 ranked_payloads,
                 key=lambda item: (
                     self._normalize_filter_value(item["payload"]["title"]),
-                    -item["score"],
+                    -item["final_score"],
                 ),
             )
         return ranked_payloads
@@ -453,6 +613,9 @@ class SearchService:
         date_from: date | str | None,
         date_to: date | str | None,
         sort_by: str | None,
+        search_mode: str | None = None,
+        text_weight: float | None = None,
+        semantic_weight: float | None = None,
     ) -> str | None:
         filters = {
             "category": category,
@@ -461,6 +624,9 @@ class SearchService:
             "dateFrom": self._stringify_date_filter(date_from),
             "dateTo": self._stringify_date_filter(date_to),
             "sortBy": sort_by,
+            "searchMode": search_mode,
+            "textWeight": text_weight,
+            "semanticWeight": semantic_weight,
         }
         filtered_items = [f"{key}={value}" for key, value in filters.items() if value]
         return ";".join(filtered_items) if filtered_items else None
@@ -473,6 +639,9 @@ class SearchService:
             "dateFrom": None,
             "dateTo": None,
             "sortBy": None,
+            "searchMode": None,
+            "textWeight": None,
+            "semanticWeight": None,
         }
         if not serialized_filters:
             return filters
@@ -514,16 +683,20 @@ class SearchService:
         page: int,
         per_page: int,
         response_time_ms: int,
+        mode: str,
     ) -> dict:
         return {
             "searchId": None,
             "query": query,
+            "mode": mode,
+            "searchMode": mode,
             "total": 0,
             "page": page,
             "perPage": per_page,
             "totalPages": 1,
             "responseTimeMs": response_time_ms,
             "items": [],
+            "results": [],
         }
 
 

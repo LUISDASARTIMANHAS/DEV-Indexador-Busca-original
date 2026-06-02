@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.domain.document_category import DocumentCategory
@@ -37,8 +37,11 @@ class SearchRepository:
                 DocumentMetadata.tipo_documento.label("metadata_document_type"),
                 Document.data_publicacao.label("document_date"),
                 DocumentCategory.nome_categoria.label("category"),
+                DocumentField.cod_campo_documento.label("field_id"),
+                DocumentField.conteudo.label("field_content"),
                 FieldType.tipo_campo.label("field_type"),
                 Term.texto_termo.label("term"),
+                Term.df.label("df"),
                 Term.idf.label("idf"),
                 InvertedIndex.tf.label("tf"),
                 InvertedIndex.posicao_inicial.label("posicao_inicial"),
@@ -65,6 +68,14 @@ class SearchRepository:
             .filter(DocumentHistory.versao_ativa.is_(True))
         )
         return query.all()
+
+    def count_active_documents(self, db: Session) -> int:
+        return (
+            db.query(func.count(Document.cod_documento))
+            .filter(Document.ativo.is_(True))
+            .scalar()
+            or 0
+        )
 
     def create_search_history(
         self,

@@ -17,6 +17,9 @@ const SearchPage = () => {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [sortBy, setSortBy] = useState("relevancia");
+  const [mode, setMode] = useState("bm25");
+  const [textWeight, setTextWeight] = useState("0.6");
+  const [semanticWeight, setSemanticWeight] = useState("0.4");
   const [limit, setLimit] = useState("20");
   const { data: recentSearches = [] } = useRecentSearches();
 
@@ -41,6 +44,11 @@ const SearchPage = () => {
       }
       if (sortBy !== "relevancia") {
         params.set("sortBy", sortBy);
+      }
+      params.set("mode", mode);
+      if (mode === "hybrid") {
+        params.set("textWeight", textWeight);
+        params.set("semanticWeight", semanticWeight);
       }
       navigate(`/resultados?${params.toString()}`);
     }
@@ -123,7 +131,48 @@ const SearchPage = () => {
                 <Input type="date" className="text-xs" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
               </div>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Modo</Label>
+                <Select value={mode} onValueChange={setMode}>
+                  <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="frequency">Frequência</SelectItem>
+                    <SelectItem value="tfidf">TF-IDF</SelectItem>
+                    <SelectItem value="bm25">BM25</SelectItem>
+                    <SelectItem value="semantic">Semântica</SelectItem>
+                    <SelectItem value="hybrid">Híbrida</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {mode === "hybrid" && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Peso textual</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      value={textWeight}
+                      onChange={(event) => setTextWeight(event.target.value)}
+                      className="w-24 text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Peso semântico</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      value={semanticWeight}
+                      onChange={(event) => setSemanticWeight(event.target.value)}
+                      className="w-24 text-xs"
+                    />
+                  </div>
+                </>
+              )}
               <div className="space-y-1.5">
                 <Label className="text-xs">Ordenar por</Label>
                 <Select value={sortBy} onValueChange={setSortBy}>
@@ -160,7 +209,7 @@ const SearchPage = () => {
           {recentSearches.map(({ id, term }) => (
             <button
               key={id}
-              onClick={() => { setQuery(term); navigate(`/resultados?q=${encodeURIComponent(term)}`); }}
+              onClick={() => { setQuery(term); navigate(`/resultados?q=${encodeURIComponent(term)}&mode=${mode}`); }}
               className="px-3 py-1.5 rounded-full text-sm bg-secondary text-secondary-foreground hover:bg-accent transition-colors"
             >
               {term}
