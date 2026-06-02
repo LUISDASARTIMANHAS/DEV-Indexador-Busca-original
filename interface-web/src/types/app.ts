@@ -20,12 +20,19 @@ export type SearchFilters = {
   dateFrom?: string;
   dateTo?: string;
   sortBy?: string;
+  mode?: SearchMode;
+  textWeight?: number;
+  semanticWeight?: number;
+  debugAnalysis?: boolean;
   limit?: number;
   page?: number;
 };
 
+export type SearchMode = "frequency" | "tfidf" | "bm25" | "semantic" | "hybrid";
+
 export type SearchResult = {
   id: number;
+  documentId?: number;
   title: string;
   snippet: string;
   category: string;
@@ -37,16 +44,60 @@ export type SearchResult = {
   size: string;
   date: string;
   relevance: number;
+  textualScore?: number;
+  semanticScore?: number;
+  finalScore?: number;
+  searchMode?: SearchMode | string;
+  matchedTerms?: string[];
+};
+
+export type QueryFilters = {
+  year?: number | null;
+  type?: string | null;
+  category?: string | null;
+  author?: string | null;
+  date_from?: string | null;
+  date_to?: string | null;
+};
+
+export type SearchAnalysis = {
+  terms: string[];
+  filters: QueryFilters;
+  phrases: string[];
+  excluded_terms: string[];
+  intent: string;
+  warnings: string[];
 };
 
 export type SearchResponse = {
+  searchId: number | null;
   query: string;
+  analysis?: SearchAnalysis | null;
+  mode?: SearchMode | string;
+  searchMode?: SearchMode | string;
   total: number;
   page: number;
   perPage: number;
   totalPages: number;
   responseTimeMs: number;
   items: SearchResult[];
+  results?: SearchResult[];
+};
+
+export type RelevanceFeedbackPayload = {
+  searchId: number;
+  documentId: number;
+  rating: number;
+  comment?: string;
+};
+
+export type RelevanceFeedback = {
+  id: number;
+  searchId: number;
+  documentId: number;
+  rating: number;
+  comment?: string | null;
+  createdAt: string;
 };
 
 export type SearchHistoryItem = {
@@ -108,10 +159,16 @@ export type DocumentDetails = {
   sizeBytes: number;
   size: string;
   hash: string;
-  downloadUrl?: string;
+  downloadUrl?: string | null;
   content: string;
   formattedContent?: string;
   extractedCharacters: number;
+};
+
+export type DocumentVersion = {
+  version: number;
+  createdAt: string;
+  active: boolean;
 };
 
 export type IngestionBatchFile = {
@@ -135,6 +192,10 @@ export type DocumentUploadPayload = {
   title?: string;
   author?: string;
   documentType?: string;
+};
+
+export type DocumentVersionUploadPayload = Omit<DocumentUploadPayload, "category"> & {
+  category?: string;
 };
 
 export type BatchUploadPayload = {
@@ -318,6 +379,13 @@ export type HistoryEntry = {
   action: string;
   details: string;
   status: "success" | "error" | "info" | "warning";
+};
+
+export type AdministrativeHistoryFilters = {
+  userId?: number;
+  dateFrom?: string;
+  dateTo?: string;
+  limit?: number;
 };
 
 export type NotificationType = "info" | "success" | "warning" | "error";

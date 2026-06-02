@@ -1,5 +1,6 @@
 # app/core/database.py
 
+from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -28,8 +29,12 @@ def get_db():
     try:
         logger.debug("Using database session: %s", db)
         yield db
-    except Exception as e:
-        logger.exception("Database session error: %s", e)
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Database session error: %s", exc)
         raise
     finally:
         logger.debug("Closing database session: %s", db)

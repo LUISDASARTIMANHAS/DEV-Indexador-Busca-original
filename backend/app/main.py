@@ -11,8 +11,10 @@ from starlette.requests import Request
 
 from app.api.v1.router import api_router
 from app.core.config import settings
-from app.core.database import Base, engine
+from app.core.database import Base, SessionLocal, engine
 from app.core.logging import logger
+from app.core.schema import ensure_version_file_metadata_columns
+from app.core.security import hash_password
 from app.domain.administrative_history import AdministrativeHistory
 from app.domain.document_category import DocumentCategory
 from app.domain.document_access_history import DocumentAccessHistory
@@ -27,11 +29,35 @@ from app.domain.inverted_index import InvertedIndex
 from app.domain.metric_calculation import MetricCalculation
 from app.domain.invalid_document import InvalidDocument
 from app.domain.document import Document
+from app.domain.document_embedding import DocumentEmbedding
 from app.domain.notification import Notification
 from app.domain.search_history import SearchHistory
+from app.domain.relevance_feedback import RelevanceFeedback
 from app.domain.term import Term
 from app.domain.user import User
 from app.domain.user_session import UserSession
+
+
+def ensure_initial_admin() -> None:
+    if not settings.INITIAL_ADMIN_PASSWORD:
+        logger.info("Senha administrativa inicial nao configurada; bootstrap de administrador ignorado.")
+        return
+
+    with SessionLocal() as db:
+        if db.query(User).filter(User.perfil == "ADMIN").first():
+            return
+        db.add(
+            User(
+                nome="Administrador",
+                login="admin",
+                email="admin@ifes.edu.br",
+                senha_hash=hash_password(settings.INITIAL_ADMIN_PASSWORD),
+                perfil="ADMIN",
+                ativo=True,
+            )
+        )
+        db.commit()
+        logger.info("Usuario administrador inicial criado a partir da configuracao segura.")
 
 
 @asynccontextmanager
@@ -39,6 +65,8 @@ async def lifespan(_: FastAPI):
     logger.info("Inicializando aplicação e criando tabelas no banco de dados")
     try:
         Base.metadata.create_all(bind=engine)
+        ensure_version_file_metadata_columns(engine)
+        ensure_initial_admin()
         logger.info("Banco de dados inicializado com sucesso")
     except OperationalError as exc:
         logger.warning("Falha ao inicializar o schema do banco de dados: %s", exc)

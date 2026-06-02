@@ -19,13 +19,17 @@ import {
 } from "@/lib/api/mock-data";
 import { appEnv } from "@/lib/env";
 import { storageKeys } from "@/lib/storage";
+import { buildTextPdfBlob } from "@/lib/pdf";
 import type {
   AppSettings,
+  AdministrativeHistoryFilters,
   AppNotification,
   BatchUploadPayload,
   BatchUploadResult,
   DocumentDetails,
   DocumentUploadPayload,
+  DocumentVersion,
+  DocumentVersionUploadPayload,
   HistoryEntry,
   IndexStatusSnapshot,
   IngestionBatchFile,
@@ -35,6 +39,8 @@ import type {
   MetricsReportFilters,
   MetricsSnapshot,
   ReindexResult,
+  RelevanceFeedback,
+  RelevanceFeedbackPayload,
   SearchFilters,
   SearchHistoryFilters,
   SearchHistoryResponse,
@@ -197,6 +203,10 @@ export const searchService = {
         dateFrom: filters.dateFrom,
         dateTo: filters.dateTo,
         sortBy: filters.sortBy,
+        mode: filters.mode,
+        textWeight: filters.textWeight,
+        semanticWeight: filters.semanticWeight,
+        debug_analysis: filters.debugAnalysis,
         limit: filters.limit,
         page: filters.page,
       },
@@ -230,18 +240,113 @@ export const searchService = {
   },
 };
 
+export const feedbackService = {
+  async submit(payload: RelevanceFeedbackPayload): Promise<RelevanceFeedback> {
+    if (shouldUseMocks()) {
+      await delay(120);
+      return {
+        id: Date.now(),
+        ...payload,
+        comment: payload.comment ?? null,
+        createdAt: new Date().toISOString(),
+      };
+    }
+
+    return apiRequest<RelevanceFeedback>("/api/v1/feedback", {
+      method: "POST",
+      body: payload,
+    });
+  },
+};
+
 export const documentService = {
-  async getById(id: number): Promise<DocumentDetails> {
+  async getById(id: number, version?: number): Promise<DocumentDetails> {
     if (shouldUseMocks()) {
       await delay();
       const document = mockDocuments.find((item) => item.id === id);
       if (!document) {
         throw new Error("Documento não encontrado.");
       }
-      return document;
+      return version === undefined ? document : { ...document, version };
     }
 
-    return apiRequest<DocumentDetails>(`/api/v1/documents/${id}`);
+    const path = version === undefined
+      ? `/api/v1/documents/${id}`
+      : `/api/v1/documents/${id}/versions/${version}`;
+    return apiRequest<DocumentDetails>(path);
+  },
+
+  async versions(id: number): Promise<DocumentVersion[]> {
+    if (shouldUseMocks()) {
+      await delay(100);
+      const document = mockDocuments.find((item) => item.id === id);
+      if (!document) {
+        throw new Error("Documento não encontrado.");
+      }
+      return Array.from({ length: document.version }, (_, index) => {
+        const version = document.version - index;
+        return {
+          version,
+          createdAt: document.indexedAt,
+          active: version === document.version,
+        };
+      });
+    }
+
+    return apiRequest<DocumentVersion[]>(`/api/v1/documents/${id}/versions`);
+  },
+
+  async createVersion(id: number, payload: DocumentVersionUploadPayload): Promise<DocumentDetails> {
+    if (shouldUseMocks()) {
+      await delay(500);
+      const document = mockDocuments.find((item) => item.id === id);
+      if (!document) {
+        throw new Error("Documento não encontrado.");
+      }
+      return {
+        ...document,
+        title: payload.title || document.title,
+        author: payload.author || document.author,
+        documentType: payload.documentType || document.documentType,
+        category: payload.category || document.category,
+        fileName: payload.file.name,
+        version: document.version + 1,
+      };
+    }
+
+    const formData = new FormData();
+    formData.append("file", payload.file);
+    if (payload.category) {
+      formData.append("category", payload.category);
+    }
+    if (payload.documentDate) {
+      formData.append("document_date", payload.documentDate);
+    }
+    if (payload.title) {
+      formData.append("title", payload.title);
+    }
+    if (payload.author) {
+      formData.append("author", payload.author);
+    }
+    if (payload.documentType) {
+      formData.append("document_type", payload.documentType);
+    }
+
+    return apiRequest<DocumentDetails>(`/api/v1/documents/${id}`, {
+      method: "PUT",
+      body: formData,
+    });
+  },
+
+  async restoreVersion(id: number, version: number): Promise<DocumentDetails> {
+    if (shouldUseMocks()) {
+      await delay(300);
+      return this.getById(id, version);
+    }
+
+    return apiRequest<DocumentDetails>(`/api/v1/documents/${id}/versions/${version}/restore`, {
+      method: "POST",
+    });
   },
 
   async reindex(id: number): Promise<void> {
@@ -255,7 +360,7 @@ export const documentService = {
     });
   },
 
-  async download(id: number): Promise<{ blob: Blob; filename: string | null }> {
+  async download(id: number, version?: number): Promise<{ blob: Blob; filename: string | null }> {
     if (shouldUseMocks()) {
       await delay(150);
       const document = mockDocuments.find((item) => item.id === id);
@@ -265,10 +370,13 @@ export const documentService = {
       };
     }
 
-    return apiBlobRequest(`/api/v1/documents/${id}/download`);
+    const path = version === undefined
+      ? `/api/v1/documents/${id}/download`
+      : `/api/v1/documents/${id}/versions/${version}/download`;
+    return apiBlobRequest(path);
   },
 
-  async export(id: number, format: "txt" | "json"): Promise<{ blob: Blob; filename: string | null }> {
+  async export(id: number, format: "txt" | "json", version?: number): Promise<{ blob: Blob; filename: string | null }> {
     if (shouldUseMocks()) {
       await delay(150);
       const document = mockDocuments.find((item) => item.id === id);
@@ -281,7 +389,10 @@ export const documentService = {
       };
     }
 
-    return apiBlobRequest(`/api/v1/documents/${id}/export`, {
+    const path = version === undefined
+      ? `/api/v1/documents/${id}/export`
+      : `/api/v1/documents/${id}/versions/${version}/export`;
+    return apiBlobRequest(path, {
       query: { format },
     });
   },
@@ -550,23 +661,21 @@ export const metricsService = {
   },
 
   async exportReport(
-    format: "csv" | "json",
+    format: "csv" | "pdf",
     filters: MetricsReportFilters = {},
   ): Promise<{ blob: Blob; filename: string | null }> {
     if (shouldUseMocks()) {
       await delay(180);
-      const content = format === "json"
-        ? JSON.stringify(mockMetricsReport, null, 2)
-        : [
+      const content = [
             "section,key,value",
             `summary,totalQueries,${mockMetricsReport.summary.totalQueries}`,
             `summary,mostFrequentQuery,${mockMetricsReport.summary.mostFrequentQuery ?? ""}`,
             `frequentQueries,${mockMetricsReport.frequentQueries[0]?.query ?? ""},${mockMetricsReport.frequentQueries[0]?.count ?? 0}`,
           ].join("\n");
       return {
-        blob: new Blob([content], {
-          type: format === "json" ? "application/json;charset=utf-8" : "text/csv;charset=utf-8",
-        }),
+        blob: format === "pdf"
+          ? buildTextPdfBlob(["Relatorio de busca", "", ...content.split("\n")])
+          : new Blob([content], { type: "text/csv;charset=utf-8" }),
         filename: `relatorio-busca-mock.${format}`,
       };
     }
@@ -582,13 +691,20 @@ export const metricsService = {
 };
 
 export const historyService = {
-  async list(): Promise<HistoryEntry[]> {
+  async list(filters: AdministrativeHistoryFilters = {}): Promise<HistoryEntry[]> {
     if (shouldUseMocks()) {
       await delay(150);
       return mockHistory;
     }
 
-    return apiRequest<HistoryEntry[]>("/api/v1/history");
+    return apiRequest<HistoryEntry[]>("/api/v1/history", {
+      query: {
+        userId: filters.userId,
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
+        limit: filters.limit,
+      },
+    });
   },
 };
 

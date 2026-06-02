@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type {
+  AdministrativeHistoryFilters,
+  HistoryEntry,
   SearchHistoryAppliedFilters,
   SearchHistoryEntry,
   SearchHistoryFilters,
@@ -117,6 +119,21 @@ const buildHistoryCsv = (items: SearchHistoryEntry[]) => {
     .join("\n");
 };
 
+const buildAdministrativeHistoryCsv = (items: HistoryEntry[]) => {
+  const header = ["data", "usuario", "acao", "detalhes", "status"];
+  const rows = items.map((item) => [
+    item.date,
+    item.user,
+    item.action,
+    item.details,
+    item.status,
+  ]);
+
+  return [header, ...rows]
+    .map((row) => row.map(csvEscape).join(","))
+    .join("\n");
+};
+
 const HistoryPage = () => {
   const { isAdmin } = useAuth();
   const [formQuery, setFormQuery] = useState("");
@@ -126,8 +143,12 @@ const HistoryPage = () => {
     page: 1,
     limit: 10,
   });
+  const [adminUserId, setAdminUserId] = useState("");
+  const [adminDateFrom, setAdminDateFrom] = useState("");
+  const [adminDateTo, setAdminDateTo] = useState("");
+  const [adminFilters, setAdminFilters] = useState<AdministrativeHistoryFilters>({ limit: 100 });
   const { data, isLoading, isError, refetch } = useSearchHistory(filters);
-  const adminHistory = useHistory(isAdmin);
+  const adminHistory = useHistory(adminFilters, isAdmin);
 
   const applyFilters = (event: React.FormEvent) => {
     event.preventDefault();
@@ -164,6 +185,35 @@ const HistoryPage = () => {
     saveBlob(
       buildHistoryCsv(data.items),
       "historico-consultas.csv",
+      "text/csv;charset=utf-8",
+    );
+  };
+
+  const applyAdminFilters = (event: React.FormEvent) => {
+    event.preventDefault();
+    const parsedUserId = Number(adminUserId);
+    setAdminFilters({
+      userId: adminUserId && Number.isInteger(parsedUserId) && parsedUserId > 0 ? parsedUserId : undefined,
+      dateFrom: adminDateFrom || undefined,
+      dateTo: adminDateTo || undefined,
+      limit: 100,
+    });
+  };
+
+  const clearAdminFilters = () => {
+    setAdminUserId("");
+    setAdminDateFrom("");
+    setAdminDateTo("");
+    setAdminFilters({ limit: 100 });
+  };
+
+  const exportAdminCsv = () => {
+    if (!adminHistory.data?.length) {
+      return;
+    }
+    saveBlob(
+      buildAdministrativeHistoryCsv(adminHistory.data),
+      "auditoria-administrativa.csv",
       "text/csv;charset=utf-8",
     );
   };
@@ -342,15 +392,63 @@ const HistoryPage = () => {
 
       {isAdmin && (
         <section>
-          <div className="mb-4">
-            <h2 className="text-xl font-semibold text-foreground">
-              Auditoria Administrativa
-            </h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Eventos administrativos mantidos separadamente do histórico de
-              buscas.
-            </p>
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-foreground">
+                Auditoria Administrativa
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Eventos administrativos mantidos separadamente do histórico de
+                buscas.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={exportAdminCsv}
+              disabled={!adminHistory.data?.length}
+            >
+              <Download className="h-4 w-4" />
+              Exportar CSV
+            </Button>
           </div>
+
+          <form onSubmit={applyAdminFilters} className="glass-card mb-4 space-y-4 p-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">ID do usuário</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={adminUserId}
+                  onChange={(event) => setAdminUserId(event.target.value)}
+                  placeholder="Ex.: 2"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Ação realizada de</Label>
+                <Input
+                  type="date"
+                  value={adminDateFrom}
+                  onChange={(event) => setAdminDateFrom(event.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Ação realizada até</Label>
+                <Input
+                  type="date"
+                  value={adminDateTo}
+                  onChange={(event) => setAdminDateTo(event.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit">Aplicar filtros</Button>
+              <Button type="button" variant="outline" onClick={clearAdminFilters}>
+                Limpar
+              </Button>
+            </div>
+          </form>
 
           {adminHistory.isLoading ? (
             <div className="glass-card p-6 text-sm text-muted-foreground">

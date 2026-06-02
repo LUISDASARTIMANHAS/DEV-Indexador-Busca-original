@@ -48,7 +48,7 @@ def get_search_report(
 
 @router.get("/report/export")
 def export_search_report(
-    format: str = Query("csv", pattern="^(csv|json)$"),
+    format: str = Query("csv", pattern="^(csv|pdf|json)$"),
     dateFrom: date | None = Query(default=None),
     dateTo: date | None = Query(default=None),
     db: Session = Depends(get_db),

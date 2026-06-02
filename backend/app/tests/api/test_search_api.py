@@ -15,10 +15,14 @@ from app.main import app
 from app.services.document_service import document_service
 
 
-def _login(client: TestClient) -> str:
+def _login(
+    client: TestClient,
+    email: str = "admin@ifes.edu.br",
+    password: str = "admin123",
+) -> str:
     response = client.post(
         "/api/v1/auth/login",
-        json={"email": "admin@ifes.edu.br", "password": "admin123"},
+        json={"email": email, "password": password},
     )
     assert response.status_code == 200
     return response.json()["token"]
@@ -90,7 +94,15 @@ def _client_fixture(tmp_path: Path) -> Generator[TestClient, None, None]:
         perfil=UserRole.ADMIN.value,
         ativo=True,
     )
-    db.add(admin)
+    user = User(
+        nome="Usuário",
+        login="usuario",
+        email="usuario@ifes.edu.br",
+        senha_hash=hash_password("usuario123"),
+        perfil=UserRole.USER.value,
+        ativo=True,
+    )
+    db.add_all([admin, user])
     db.commit()
     db.close()
 
@@ -131,10 +143,25 @@ def test_search_returns_ranked_documents_and_recent_history(tmp_path: Path):
         assert search_response.status_code == 200
         payload = search_response.json()
         assert payload["query"] == "pesquisa ifes"
+        assert payload["searchId"] > 0
         assert payload["total"] >= 2
         assert payload["responseTimeMs"] >= 0
         assert payload["items"][0]["relevance"] >= payload["items"][-1]["relevance"]
         assert payload["items"][0]["type"] == "TXT"
+
+        hybrid_payload = _search(
+            client,
+            token,
+            "pesquisa ifes",
+            mode="hybrid",
+            textWeight=0.7,
+            semanticWeight=0.3,
+        )
+        assert hybrid_payload["mode"] == "hybrid"
+        assert hybrid_payload["items"][0]["searchMode"] == "hybrid"
+        assert "textualScore" in hybrid_payload["items"][0]
+        assert "semanticScore" in hybrid_payload["items"][0]
+        assert "finalScore" in hybrid_payload["items"][0]
 
         history_response = client.get(
             "/api/v1/search/history",
@@ -144,6 +171,71 @@ def test_search_returns_ranked_documents_and_recent_history(tmp_path: Path):
         assert history_response.status_code == 200
         history_payload = history_response.json()
         assert history_payload[0]["term"] == "pesquisa ifes"
+
+        feedback_response = client.post(
+            "/api/v1/feedback",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "searchId": payload["searchId"],
+                "documentId": payload["items"][0]["id"],
+                "rating": 9,
+                "comment": "Resultado relevante.",
+            },
+        )
+        assert feedback_response.status_code == 201
+        assert feedback_response.json()["rating"] == 9
+        assert feedback_response.json()["searchId"] == payload["searchId"]
+
+
+def test_search_analyze_endpoint_returns_query_analysis(tmp_path: Path):
+    for client in _client_fixture(tmp_path):
+        token = _login(client)
+
+        response = client.post(
+            "/api/v1/search/analyze",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"query": "relatórios de estágio 2025 PDF"},
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["raw_query"] == "relatórios de estágio 2025 PDF"
+        assert payload["normalized_query"] == "relatorios de estagio 2025 pdf"
+        assert payload["terms"] == ["relatorios", "estagio"]
+        assert payload["filters"]["year"] == 2025
+        assert payload["filters"]["type"] == "pdf"
+        assert payload["intent"] == "search_with_filters"
+        assert payload["is_valid"] is True
+
+
+def test_search_debug_analysis_includes_analyzer_summary(tmp_path: Path):
+    for client in _client_fixture(tmp_path):
+        token = _login(client)
+        _upload_with_metadata(
+            client,
+            token,
+            "relatorio-estagio-2025.txt",
+            b"Relatorio de estagio supervisionado do IFES em 2025.",
+            category="academico",
+            document_type="Relatorio",
+            document_date="2025-05-10",
+        )
+
+        response = client.get(
+            "/api/v1/search",
+            headers={"Authorization": f"Bearer {token}"},
+            params={
+                "q": "relatório de estágio 2025 txt",
+                "debug_analysis": "true",
+            },
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["analysis"]["terms"] == ["relatorio", "estagio"]
+        assert payload["analysis"]["filters"]["year"] == 2025
+        assert payload["analysis"]["filters"]["type"] == "txt"
+        assert payload["analysis"]["intent"] == "search_with_filters"
 
 
 def test_search_supports_author_filter_and_detailed_history(tmp_path: Path):
@@ -208,6 +300,45 @@ def test_search_supports_author_filter_and_detailed_history(tmp_path: Path):
         assert history_payload["items"][0]["filters"]["dateTo"] == "2026-04-30"
 
 
+def test_non_admin_cannot_mutate_documents_or_ingest_files(tmp_path: Path):
+    for client in _client_fixture(tmp_path):
+        admin_token = _login(client)
+        user_token = _login(client, "usuario@ifes.edu.br", "usuario123")
+        document = _upload_with_metadata(
+            client,
+            admin_token,
+            "portaria.txt",
+            b"conteudo administrativo do ifes",
+            category="administrativo",
+        )
+        user_headers = {"Authorization": f"Bearer {user_token}"}
+
+        upload_response = client.post(
+            "/api/v1/ingestion/upload",
+            headers=user_headers,
+            files={"file": ("indevido.txt", b"conteudo indevido", "text/plain")},
+            data={"category": "administrativo"},
+        )
+        update_response = client.put(
+            f"/api/v1/documents/{document['id']}",
+            headers=user_headers,
+            files={"file": ("alterado.txt", b"alteracao indevida", "text/plain")},
+        )
+        restore_response = client.post(
+            f"/api/v1/documents/{document['id']}/versions/1/restore",
+            headers=user_headers,
+        )
+        delete_response = client.delete(
+            f"/api/v1/documents/{document['id']}",
+            headers=user_headers,
+        )
+
+        assert upload_response.status_code == 403
+        assert update_response.status_code == 403
+        assert restore_response.status_code == 403
+        assert delete_response.status_code == 403
+
+
 def test_document_versioning_soft_delete_and_restore_keep_index_consistent(tmp_path: Path):
     for client in _client_fixture(tmp_path):
         token = _login(client)
@@ -249,6 +380,41 @@ def test_document_versioning_soft_delete_and_restore_keep_index_consistent(tmp_p
         assert [item["version"] for item in versions_payload] == [2, 1]
         assert versions_payload[0]["active"] is True
         assert versions_payload[1]["active"] is False
+
+        historical_details = client.get(
+            f"/api/v1/documents/{document_id}/versions/1",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert historical_details.status_code == 200
+        assert historical_details.json()["version"] == 1
+        assert historical_details.json()["fileName"] == "portaria.txt"
+        assert "legado original" in historical_details.json()["content"]
+        assert historical_details.json()["downloadUrl"].endswith("/versions/1/download")
+
+        historical_download = client.get(
+            f"/api/v1/documents/{document_id}/versions/1/download",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert historical_download.status_code == 200
+        assert historical_download.content == b"conteudo legado original ifes"
+
+        historical_export = client.get(
+            f"/api/v1/documents/{document_id}/versions/1/export",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"format": "json"},
+        )
+        assert historical_export.status_code == 200
+        assert historical_export.json()["version"] == 1
+
+        active_details = client.get(
+            f"/api/v1/documents/{document_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert active_details.status_code == 200
+        assert active_details.json()["version"] == 2
+        assert active_details.json()["fileName"] == "portaria-v2.txt"
+        assert historical_details.json()["hash"] != active_details.json()["hash"]
+        assert "atualizado revisado" in active_details.json()["content"]
 
         old_search = _search(client, token, "legado original")
         assert old_search["total"] == 0
@@ -300,6 +466,7 @@ def test_document_versioning_soft_delete_and_restore_keep_index_consistent(tmp_p
         restored_search = _search(client, token, "legado original")
         assert restored_search["total"] == 1
         assert restored_search["items"][0]["id"] == document_id
+        assert restored_search["items"][0]["fileName"] == "portaria.txt"
 
         status_after_restore = client.get(
             "/api/v1/index/status",

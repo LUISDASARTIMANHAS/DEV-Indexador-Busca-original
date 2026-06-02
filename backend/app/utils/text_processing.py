@@ -6,7 +6,7 @@ STOPWORDS_PT_BR = {
     "e", "em", "entre", "era", "essa", "esse", "esta", "este", "eu", "foi",
     "ha", "isso", "isto", "ja", "la", "mais", "mas", "na", "nas", "no",
     "nos", "o", "os", "ou", "para", "pela", "pelas", "pelo", "pelos", "por",
-    "que", "se", "sem", "ser", "sua", "suas", "seu", "seus", "tem", "uma",
+    "que", "se", "sem", "ser", "sobre", "sua", "suas", "seu", "seus", "tem", "uma",
     "umas", "um", "uns",
 }
 

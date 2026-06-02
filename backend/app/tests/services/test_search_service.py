@@ -13,6 +13,20 @@ from app.services.document_service import document_service
 from app.services.search_service import search_service
 
 
+def test_search_snippet_highlights_relevant_accented_text_without_rendering_document_html():
+    source = (
+        ("introducao sem correspondencia " * 20)
+        + '<img src="x" onerror="alert(1)"> Resolução normativa aplicada no IFES.'
+    )
+
+    snippet = search_service._build_snippet(source, ["resolucao"])
+
+    assert snippet.startswith("... ")
+    assert "<mark>Resolução</mark>" in snippet
+    assert "<img" not in snippet
+    assert "&lt;img" in snippet
+
+
 def test_search_service_applies_author_filter_and_records_history(tmp_path):
     engine = create_engine(
         "sqlite://",

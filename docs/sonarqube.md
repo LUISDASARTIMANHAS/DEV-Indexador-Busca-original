@@ -33,6 +33,10 @@ Isso altera apenas a porta exposta na sua maquina. Entre containers, o acesso co
 
 ## Como subir
 
+Defina `SECRET_KEY` no `.env` da raiz com um valor aleatorio de pelo menos 32
+caracteres e `INITIAL_ADMIN_PASSWORD` com uma senha inicial forte de pelo
+menos 12 caracteres antes de iniciar os containers.
+
 ```bash
 docker compose -f docker/docker-compose.yml up -d
 ```

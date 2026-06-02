@@ -217,6 +217,14 @@ def test_non_admin_cannot_access_admin_routes(client: TestClient):
     assert response.status_code == 403
     assert response.json()["message"] == "Operação não permitida para o perfil do usuário."
 
+    history_response = client.get(
+        "/api/v1/history/",
+        headers={"Authorization": f"Bearer {admin_session['token']}"},
+        params={"userId": create_response.json()["cod_usuario"]},
+    )
+    assert history_response.status_code == 200
+    assert history_response.json()[0]["action"] == "Acesso Negado"
+
 
 def test_admin_history_is_logged_and_protected(client: TestClient):
     admin_session = login(client, "admin@ifes.edu.br", "admin123")

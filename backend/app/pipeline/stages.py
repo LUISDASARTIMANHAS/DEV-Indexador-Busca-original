@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.domain.document_history import DocumentHistory
 from app.exceptions.document_exceptions import DocumentValidationException
 from app.pipeline.pipeline_stage import PipelineStage
+from app.services.semantic_search_service import semantic_search_service
 from app.services.inverted_index_service import inverted_index_service
 from app.utils.text_processing import preprocess_for_indexing
 
@@ -107,3 +108,27 @@ class RelationalIndexPersistStage(PipelineStage):
         context["term_count"] = index_payload.get("term_count", result["term_count"])
         context["token_count"] = index_payload.get("token_count", result["token_count"])
         return context
+
+
+class SemanticEmbeddingPersistStage(PipelineStage):
+    def execute(self, db: Session, context: dict) -> dict:
+        history: DocumentHistory = context["document_history"]
+        semantic_text = self._semantic_text(context)
+        result = semantic_search_service.persist_document_embedding(
+            db,
+            document_id=int(history.cod_documento),
+            version_number=int(history.numero_versao) if history.numero_versao is not None else None,
+            text=semantic_text,
+        )
+        context["embedding_model"] = result["model"]
+        return context
+
+    def _semantic_text(self, context: dict) -> str:
+        field_texts = context.get("field_texts") or []
+        if field_texts:
+            return "\n".join(
+                str(field.get("text", ""))
+                for field in field_texts
+                if field.get("text")
+            )
+        return str(context.get("extracted_text") or context.get("processed_text") or "")

@@ -1,5 +1,6 @@
 import json
 import os
+from collections import Counter
 
 class IndexRepository:
     """
@@ -16,6 +17,11 @@ class IndexRepository:
         self.storage_path = storage_path
         self.index = {}
         self.forward_index = {}
+        self.term_frequencies = {}
+        self.document_lengths = {}
+        self.document_frequencies = {}
+        self.total_documents = 0
+        self.average_document_length = 0.0
         
         self._load()
 
@@ -33,8 +39,37 @@ class IndexRepository:
                     data = json.load(f)
                     self.index = data.get("inverted_index", {})
                     self.forward_index = data.get("forward_index", {})
+                    self.term_frequencies = data.get("term_frequencies", {})
+                    self.document_lengths = data.get("document_lengths", {})
+                    self.document_frequencies = data.get("document_frequencies", {})
+                    self.total_documents = data.get("total_documents", len(self.forward_index))
+                    self.average_document_length = data.get("average_document_length", 0.0)
+                    self._refresh_statistics()
             except Exception as e:
                 print(f"Erro ao carregar índice: {e}")
+
+    def _refresh_statistics(self):
+        if not self.term_frequencies:
+            self.term_frequencies = {
+                document_id: dict(Counter(tokens))
+                for document_id, tokens in self.forward_index.items()
+            }
+        self.document_lengths = {
+            document_id: sum(frequencies.values())
+            for document_id, frequencies in self.term_frequencies.items()
+        }
+        self.total_documents = len(self.term_frequencies)
+        if self.total_documents:
+            self.average_document_length = (
+                sum(self.document_lengths.values()) / self.total_documents
+            )
+        else:
+            self.average_document_length = 0.0
+        document_frequencies = {}
+        for frequencies in self.term_frequencies.values():
+            for token in frequencies:
+                document_frequencies[token] = document_frequencies.get(token, 0) + 1
+        self.document_frequencies = document_frequencies
 
     def add_tokens(self, document_id: str, tokens: list):
         """
@@ -67,3 +102,32 @@ class IndexRepository:
             docs = self.index.get(token, [])
             documents.extend(docs)
         return list(set(documents)) # Remove duplicatas na busca multi-termo
+
+    def documents_for_tokens(self, tokens: list):
+        """Monta documentos candidatos com estatísticas para ranking."""
+        self._refresh_statistics()
+        candidate_ids = self.search_tokens(tokens)
+        documents = []
+        for document_id in candidate_ids:
+            frequencies = self.term_frequencies.get(document_id, {})
+            documents.append({
+                "document_id": document_id,
+                "term_frequencies": frequencies,
+                "terms": {
+                    term: {
+                        "tf": frequency,
+                        "df": self.document_frequencies.get(term, 0),
+                    }
+                    for term, frequency in frequencies.items()
+                },
+                "document_length": self.document_lengths.get(document_id, 0),
+            })
+        return documents
+
+    def collection_statistics(self):
+        self._refresh_statistics()
+        return {
+            "total_documents": self.total_documents,
+            "average_document_length": self.average_document_length,
+            "document_frequencies": self.document_frequencies,
+        }

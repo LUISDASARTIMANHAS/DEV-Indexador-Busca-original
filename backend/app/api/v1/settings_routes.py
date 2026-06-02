@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends
 
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, require_roles
 from app.core.logging import logger
 from app.domain.user import User
+from app.domain.user_role import UserRole
 from app.schemas.settings_schema import AppSettingsResponse
 from app.services.settings_service import settings_service
 
@@ -20,7 +21,7 @@ def get_settings(_: User = Depends(get_current_user)):
 @router.put("/", response_model=AppSettingsResponse)
 def update_settings(
     payload: AppSettingsResponse,
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     logger.info("Update settings requested payload=%s", payload.model_dump())
     return settings_service.update_settings(payload)

@@ -10,6 +10,7 @@ from starlette.datastructures import UploadFile
 
 from app.core.database import Base
 from app.domain.document import Document
+from app.domain.document_access_history import DocumentAccessHistory
 from app.domain.user import User
 from app.domain.user_role import UserRole
 from app.domain.document_history import DocumentHistory
@@ -146,6 +147,7 @@ def test_document_versioning_soft_delete_and_restore_keep_index_consistent(tmp_p
         )
         assert restored_search["total"] == 1
         assert restored_search["items"][0]["id"] == payload["id"]
+        assert restored_search["items"][0]["fileName"] == "portaria.txt"
 
         restore_status = index_service.get_status_snapshot(db)
         assert restore_status["integrityOk"] is True
@@ -243,6 +245,15 @@ def test_document_physical_delete_removes_storage_metadata_and_index(tmp_path: P
             .count()
             == 2
         )
+        db.add(
+            DocumentAccessHistory(
+                cod_documento=payload["id"],
+                cod_usuario=user.cod_usuario,
+                tipo_acesso="view",
+                origem="test-purge",
+            )
+        )
+        db.commit()
 
         purge_payload = document_service.purge_document(
             db,
@@ -251,6 +262,7 @@ def test_document_physical_delete_removes_storage_metadata_and_index(tmp_path: P
         )
         assert purge_payload["message"] == "Documento removido fisicamente com sucesso."
         assert all(not file_path.exists() for file_path in stored_files)
+        assert document_service.storage_dir.exists()
         assert db.query(Document).filter(Document.cod_documento == payload["id"]).count() == 0
         assert (
             db.query(DocumentMetadata)
@@ -276,7 +288,12 @@ def test_document_physical_delete_removes_storage_metadata_and_index(tmp_path: P
             .count()
             == 0
         )
-
+        assert (
+            db.query(DocumentAccessHistory)
+            .filter(DocumentAccessHistory.cod_documento == payload["id"])
+            .count()
+            == 0
+        )
         search_after_purge = search_service.search(
             db,
             query="conteudo fisico atualizado",

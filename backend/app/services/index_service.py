@@ -5,9 +5,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from os import cpu_count
 
 from sqlalchemy import case, func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
-from app.core.database import SessionLocal
 from app.core.logging import logger
 from app.domain.document import Document
 from app.domain.document_field import DocumentField
@@ -22,6 +21,7 @@ from app.exceptions.document_exceptions import DocumentNotFoundException
 from app.pipeline.document_ingestion_pipeline import DocumentIngestionPipeline
 from app.pipeline.stages import (
     RelationalIndexPersistStage,
+    SemanticEmbeddingPersistStage,
     TextPreprocessStage,
     TextTokenizeStage,
 )
@@ -38,6 +38,7 @@ class IndexService:
                 TextPreprocessStage(),
                 TextTokenizeStage(),
                 RelationalIndexPersistStage(),
+                SemanticEmbeddingPersistStage(),
             ]
         )
 
@@ -158,7 +159,11 @@ class IndexService:
 
     def reindex_document(self, db: Session, *, document_id: int, triggered_by: User) -> dict:
         logger.info("Iniciando reindexação do documento %s", document_id)
-        inverted_index_service.remove_document_terms(db, document_id=document_id)
+        inverted_index_service.remove_document_terms(
+            db,
+            document_id=document_id,
+            refresh_statistics=False,
+        )
         return self.process_document(
             db,
             document_id=document_id,
@@ -166,9 +171,22 @@ class IndexService:
             trigger_label="Reindexação",
         )
 
-    def _reindex_document_in_new_session(self, document_id: int, triggered_by: User) -> None:
-        db = SessionLocal()
+    def _reindex_document_in_new_session(
+        self,
+        bind,
+        document_id: int,
+        triggered_by_id: int,
+    ) -> None:
+        worker_session = sessionmaker(autocommit=False, autoflush=False, bind=bind)
+        db = worker_session()
         try:
+            triggered_by = (
+                db.query(User)
+                .filter(User.cod_usuario == triggered_by_id)
+                .first()
+            )
+            if triggered_by is None:
+                raise DocumentNotFoundException("Usuário responsável não encontrado.")
             self.reindex_document(db, document_id=document_id, triggered_by=triggered_by)
         finally:
             db.close()
@@ -195,14 +213,29 @@ class IndexService:
         success_count = 0
         failure_count = 0
 
-        if document_ids:
+        if db.get_bind().dialect.name == "sqlite":
+            for document_id in document_ids:
+                try:
+                    self.reindex_document(db, document_id=document_id, triggered_by=triggered_by)
+                    success_count += 1
+                except Exception as exc:
+                    db.rollback()
+                    failure_count += 1
+                    logger.warning(
+                        "Falha na reindexação do documento %s: %s",
+                        document_id,
+                        exc,
+                    )
+        elif document_ids:
             max_workers = min(4, cpu_count() or 1, len(document_ids))
+            bind = db.get_bind()
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_document = {
                     executor.submit(
                         self._reindex_document_in_new_session,
+                        bind,
                         document_id,
-                        triggered_by,
+                        triggered_by.cod_usuario,
                     ): document_id
                     for document_id in document_ids
                 }

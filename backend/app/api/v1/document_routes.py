@@ -50,7 +50,7 @@ def update_document(
     author: str | None = Form(default=None),
     document_type: str | None = Form(default=None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     payload = document_service.update_document(
         db,
@@ -85,6 +85,28 @@ def list_document_versions(
     return document_service.list_versions(db, document_id)
 
 
+@router.get("/{document_id}/versions/{version_number}", response_model=DocumentDetailsResponse)
+def get_document_version(
+    document_id: int,
+    version_number: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    payload = document_service.get_document_payload(
+        db,
+        document_id,
+        version_number=version_number,
+    )
+    metrics_service.register_document_access(
+        db,
+        document_id=document_id,
+        user_id=current_user.cod_usuario,
+        access_type="view",
+        origin=f"document-version-view:{version_number}",
+    )
+    return document_service.to_details_response(payload, version_specific=True)
+
+
 @router.post(
     "/{document_id}/versions/{version_number}/restore",
     response_model=DocumentDetailsResponse,
@@ -93,7 +115,7 @@ def restore_document_version(
     document_id: int,
     version_number: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     payload = document_service.restore_version(
         db,
@@ -102,6 +124,56 @@ def restore_document_version(
         restored_by=current_user,
     )
     return document_service.to_details_response(payload)
+
+
+@router.get("/{document_id}/versions/{version_number}/download")
+def download_document_version(
+    document_id: int,
+    version_number: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    file_path, file_name, media_type = document_service.get_document_file(
+        db,
+        document_id,
+        version_number=version_number,
+    )
+    metrics_service.register_document_access(
+        db,
+        document_id=document_id,
+        user_id=current_user.cod_usuario,
+        access_type="download",
+        origin=f"document-version-download:{version_number}",
+    )
+    return FileResponse(path=file_path, filename=file_name, media_type=media_type)
+
+
+@router.get("/{document_id}/versions/{version_number}/export")
+def export_document_version(
+    document_id: int,
+    version_number: int,
+    format: str = Query("txt", pattern="^(txt|json)$"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    content, file_name, media_type = document_service.export_document(
+        db,
+        document_id=document_id,
+        version_number=version_number,
+        export_format=format,
+    )
+    metrics_service.register_document_access(
+        db,
+        document_id=document_id,
+        user_id=current_user.cod_usuario,
+        access_type="export",
+        origin=f"document-version-export:{version_number}:{format}",
+    )
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
+    )
 
 
 @router.get("/{document_id}/download")
@@ -151,7 +223,7 @@ def export_document(
 def delete_document(
     document_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     return document_service.delete_document(
         db,

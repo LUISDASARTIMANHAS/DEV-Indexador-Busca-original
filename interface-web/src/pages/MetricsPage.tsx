@@ -3,7 +3,6 @@ import {
   BarChart3,
   Clock,
   Download,
-  FileJson,
   FileText,
   Hash,
   Save,
@@ -114,7 +113,7 @@ const MetricsPage = () => {
   const [formDateFrom, setFormDateFrom] = useState(initialRange.dateFrom || "");
   const [formDateTo, setFormDateTo] = useState(initialRange.dateTo || "");
   const [reportFilters, setReportFilters] = useState<MetricsReportFilters>(initialRange);
-  const [exporting, setExporting] = useState<"csv" | "json" | null>(null);
+  const [exporting, setExporting] = useState<"csv" | "pdf" | null>(null);
   const [persisting, setPersisting] = useState(false);
 
   const { data, isLoading, isError, refetch } = useMetrics();
@@ -146,7 +145,7 @@ const MetricsPage = () => {
     });
   };
 
-  const handleExport = async (format: "csv" | "json") => {
+  const handleExport = async (format: "csv" | "pdf") => {
     setExporting(format);
     try {
       const { blob, filename } = await metricsService.exportReport(format, reportFilters);
@@ -460,11 +459,11 @@ const MetricsPage = () => {
             <Button
               variant="outline"
               className="gap-2"
-              onClick={() => handleExport("json")}
+              onClick={() => handleExport("pdf")}
               disabled={reportLoading || exporting !== null}
             >
-              <FileJson className="h-4 w-4" />
-              {exporting === "json" ? "Exportando JSON..." : "Exportar JSON"}
+              <FileText className="h-4 w-4" />
+              {exporting === "pdf" ? "Exportando PDF..." : "Exportar PDF"}
             </Button>
             <Button
               className="gap-2"

@@ -1,3 +1,5 @@
+from datetime import date, datetime, time
+
 from sqlalchemy.orm import Session
 
 from app.domain.administrative_history import AdministrativeHistory
@@ -31,8 +33,22 @@ class AdministrativeHistoryService:
         )
         return self.repository.create(db, history)
 
-    def list_history(self, db: Session, limit: int = 100) -> list[dict]:
-        entries = self.repository.list_recent(db, limit=limit)
+    def list_history(
+        self,
+        db: Session,
+        *,
+        limit: int = 100,
+        user_id: int | None = None,
+        performed_from: date | None = None,
+        performed_to: date | None = None,
+    ) -> list[dict]:
+        entries = self.repository.list_recent(
+            db,
+            limit=limit,
+            user_id=user_id,
+            performed_from=datetime.combine(performed_from, time.min) if performed_from else None,
+            performed_to=datetime.combine(performed_to, time.max) if performed_to else None,
+        )
         results: list[dict] = []
         for entry in entries:
             user = UserRepository.get_by_id(db, entry.cod_usuario)

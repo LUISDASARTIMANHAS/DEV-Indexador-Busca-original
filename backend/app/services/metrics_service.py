@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import date, datetime, time as dt_time, timedelta
+import unicodedata
 
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
@@ -244,7 +245,7 @@ class MetricsService:
         export_format: str,
         date_from: date | str | None = None,
         date_to: date | str | None = None,
-    ) -> tuple[str, str, str]:
+    ) -> tuple[str | bytes, str, str]:
         report = self.build_report(
             db,
             date_from=date_from,
@@ -255,6 +256,31 @@ class MetricsService:
             date_from=report["summary"]["periodStart"],
             date_to=report["summary"]["periodEnd"],
         )
+
+        if export_format == "pdf":
+            summary = report["summary"]
+            lines = [
+                "IFESDOC - Relatorio de desempenho da busca",
+                f"Periodo: {summary['periodStart']} a {summary['periodEnd']}",
+                "",
+                f"Total de consultas: {summary['totalQueries']}",
+                f"Tempo medio de resposta (ms): {summary['averageResponseTimeMs']}",
+                f"Media de resultados: {summary['averageResults']}",
+                f"Consultas sem retorno: {summary['queriesWithoutResults']}",
+                f"Taxa sem resultados: {summary['zeroResultsRate']}",
+                "",
+                "Consultas sem retorno:",
+            ]
+            lines.extend(
+                f"- {item['query']} ({item['count']})"
+                for item in report["zeroResultQueries"][:10]
+            )
+            lines.extend(["", "Documentos mais acessados:"])
+            lines.extend(
+                f"- {item['title']} ({item['accessCount']} acessos)"
+                for item in report["accessedDocuments"][:10]
+            )
+            return self._simple_pdf(lines), f"{file_stub}.pdf", "application/pdf"
 
         if export_format == "json":
             import json
@@ -316,6 +342,42 @@ class MetricsService:
             f"{file_stub}.csv",
             "text/csv; charset=utf-8",
         )
+
+    @staticmethod
+    def _simple_pdf(lines: list[str]) -> bytes:
+        cleaned = [
+            unicodedata.normalize("NFKD", line).encode("ascii", "ignore").decode("ascii")
+            for line in lines
+        ]
+        commands = ["BT", "/F1 11 Tf", "50 792 Td", "14 TL"]
+        for line in cleaned:
+            escaped = line.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+            commands.extend([f"({escaped}) Tj", "T*"])
+        commands.append("ET")
+        stream = "\n".join(commands).encode("ascii")
+        objects = [
+            b"<< /Type /Catalog /Pages 2 0 R >>",
+            b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+            b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"\nendstream",
+            b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        ]
+        output = bytearray(b"%PDF-1.4\n")
+        offsets = [0]
+        for index, obj in enumerate(objects, start=1):
+            offsets.append(len(output))
+            output.extend(f"{index} 0 obj\n".encode("ascii"))
+            output.extend(obj)
+            output.extend(b"\nendobj\n")
+        xref_start = len(output)
+        output.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+        output.extend(b"0000000000 65535 f \n")
+        for offset in offsets[1:]:
+            output.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+        output.extend(
+            f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_start}\n%%EOF".encode("ascii")
+        )
+        return bytes(output)
 
     def register_document_access(
         self,

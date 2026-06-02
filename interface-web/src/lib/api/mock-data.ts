@@ -28,6 +28,46 @@ const normalizeMockText = (input: string): string =>
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
 
+const mockStopwords = new Set(["de", "da", "do", "das", "dos", "a", "o", "os", "as", "em", "para", "por", "com", "sobre"]);
+const mockFileTypes = new Set(["pdf", "txt", "csv", "doc", "docx", "xls", "xlsx"]);
+
+const analyzeMockQuery = (query: string) => {
+  const normalized = normalizeMockText(query).replace(/[^\w\s"-]/g, " ").replace(/\s+/g, " ").trim();
+  const tokens = normalized.split(/\s+/).filter(Boolean);
+  const years = tokens.filter((token) => /^20\d{2}$/.test(token)).map(Number);
+  const fileTypes = tokens.filter((token) => mockFileTypes.has(token));
+  const phrases = Array.from(query.matchAll(/"([^"]+)"/g))
+    .map((match) => normalizeMockText(match[1]).replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  const excluded_terms = Array.from(query.matchAll(/(?<!\w)-([A-Za-zÀ-ÿ0-9_]+)/g))
+    .map((match) => normalizeMockText(match[1]))
+    .filter(Boolean);
+  const phraseTokens = new Set(phrases.flatMap((phrase) => phrase.split(/\s+/)));
+  const terms = tokens.filter((token) =>
+    !mockStopwords.has(token) &&
+    !mockFileTypes.has(token) &&
+    !/^20\d{2}$/.test(token) &&
+    !phraseTokens.has(token) &&
+    !excluded_terms.includes(token)
+  );
+
+  return {
+    terms: Array.from(new Set(terms)),
+    filters: {
+      year: years[0] ?? null,
+      type: fileTypes[0] ?? null,
+      category: null,
+      author: null,
+      date_from: years[0] ? `${years[0]}-01-01` : null,
+      date_to: years[0] ? `${years[0]}-12-31` : null,
+    },
+    phrases,
+    excluded_terms,
+    intent: years.length || fileTypes.length ? "search_with_filters" : "search_documents",
+    warnings: [],
+  };
+};
+
 export const mockUsers: UserSummary[] = [
   { id: 1, name: "Carlos Silva", login: "admin", email: "admin@ifes.edu.br", role: "Administrador", active: true },
   { id: 2, name: "João Oliveira", login: "joao.oliveira", email: "joao.oliveira@ifes.edu.br", role: "Usuário", active: true },
@@ -133,9 +173,15 @@ export const mockSearch = (
     author?: string;
     dateFrom?: string;
     dateTo?: string;
+    mode?: string;
+    textWeight?: number;
+    semanticWeight?: number;
+    debugAnalysis?: boolean;
   } = {},
 ): SearchResponse => {
   const normalized = normalizeMockText(query.trim());
+  const mode = filters.mode || "bm25";
+  const queryTerms = normalized.split(/\s+/).filter(Boolean);
   const filtered = normalized === "xyz123"
     ? []
     : allSearchResults.filter((result) => {
@@ -176,15 +222,42 @@ export const mockSearch = (
   const totalPages = Math.max(1, Math.ceil(total / perPage));
   const safePage = Math.min(Math.max(page, 1), totalPages);
   const start = (safePage - 1) * perPage;
+  const items = filtered.slice(start, start + perPage).map((result, index) => {
+    const baseScore = Math.max(result.relevance / 100, 0.01);
+    const textualScore = mode === "semantic" ? 0 : baseScore * (1 + index * 0.02);
+    const semanticScore = mode === "frequency" || mode === "tfidf" || mode === "bm25"
+      ? 0
+      : Math.max(0.1, baseScore - index * 0.03);
+    const finalScore = mode === "hybrid"
+      ? ((filters.textWeight ?? 0.6) * textualScore) + ((filters.semanticWeight ?? 0.4) * semanticScore)
+      : mode === "semantic"
+        ? semanticScore
+        : textualScore;
+
+    return {
+      ...result,
+      documentId: result.id,
+      textualScore,
+      semanticScore,
+      finalScore,
+      searchMode: mode,
+      matchedTerms: queryTerms,
+    };
+  });
 
   return {
+    searchId: 500 + safePage,
     query,
+    analysis: filters.debugAnalysis ? analyzeMockQuery(query) : null,
+    mode,
+    searchMode: mode,
     total,
     page: safePage,
     perPage,
     totalPages,
     responseTimeMs: 150 + Math.floor(Math.random() * 100),
-    items: filtered.slice(start, start + perPage),
+    items,
+    results: items,
   };
 };
 
