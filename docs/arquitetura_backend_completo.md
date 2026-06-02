@@ -115,6 +115,7 @@ Pacote de versionamento da API.
 - expõe:
   - `POST /api/v1/auth/login`
   - `GET /api/v1/auth/me`
+  - `POST /api/v1/auth/logout`
 
 Responsabilidades:
 

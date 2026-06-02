@@ -259,6 +259,12 @@ Observação importante:
 - concentra o contrato consumido pelas páginas;
 - decide entre backend real e dados mockados com base em `VITE_USE_MOCK_API`.
 
+Observação importante:
+
+- o modo mock ainda é o padrão de desenvolvimento (`VITE_USE_MOCK_API=true`);
+- a autenticação real do backend já está disponível para login e perfis quando o modo API estiver habilitado;
+- outros domínios ainda podem depender de mocks até que as rotas do backend sejam implementadas completamente.
+
 Serviços atuais:
 
 - `authService`
