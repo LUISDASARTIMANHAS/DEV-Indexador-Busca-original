@@ -8,6 +8,15 @@ class QueryAnalyzer:
     MAX_QUERY_LENGTH = 300
     MIN_NORMALIZED_LENGTH = 2
     FILE_TYPES = {"pdf", "txt", "csv", "doc", "docx", "xls", "xlsx"}
+    FILE_TYPE_ALIASES = {
+        "pdfs": "pdf",
+        "txts": "txt",
+        "csvs": "csv",
+        "docs": "doc",
+        "docxs": "docx",
+        "xlss": "xls",
+        "xlsxes": "xlsx",
+    }
     GENERIC_TERMS = {"arquivo", "arquivos"}
     KNOWN_CATEGORIES = {
         "academico",
@@ -95,7 +104,11 @@ class QueryAnalyzer:
 
     def _detect_fields(self, tokens: list[str]) -> DetectedFields:
         years = [int(token) for token in tokens if self._is_year(token)]
-        file_types = [token for token in tokens if token in self.FILE_TYPES]
+        file_types = [
+            self.FILE_TYPE_ALIASES.get(token, token)
+            for token in tokens
+            if token in self.FILE_TYPES or token in self.FILE_TYPE_ALIASES
+        ]
         categories = [token for token in tokens if token in self.KNOWN_CATEGORIES]
         authors = self._detect_authors(tokens)
         return DetectedFields(
@@ -199,7 +212,7 @@ class QueryAnalyzer:
         for token in tokens:
             if token in STOPWORDS_PT_BR:
                 continue
-            if token in self.FILE_TYPES or token in self.OPERATOR_WORDS:
+            if token in self.FILE_TYPES or token in self.FILE_TYPE_ALIASES or token in self.OPERATOR_WORDS:
                 continue
             if self._is_year(token) or token in excluded_set or token in phrase_tokens:
                 continue

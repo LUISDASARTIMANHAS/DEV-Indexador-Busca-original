@@ -16,6 +16,9 @@ from app.core.logging import logger
 from app.core.schema import ensure_version_file_metadata_columns
 from app.core.security import hash_password
 from app.domain.administrative_history import AdministrativeHistory
+from app.domain.bot_conversation import BotConversation
+from app.domain.bot_interaction import BotInteraction
+from app.domain.bot_user_link import BotUserLink
 from app.domain.document_category import DocumentCategory
 from app.domain.document_access_history import DocumentAccessHistory
 from app.domain.document_field import DocumentField

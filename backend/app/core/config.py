@@ -45,6 +45,16 @@ class Settings(BaseSettings):
 
     NOTIFICATION_WORKER_INTERVAL_SECONDS: int = 60
 
+    TELEGRAM_BOT_TOKEN: str | None = None
+    TELEGRAM_WEBHOOK_SECRET: str | None = None
+    WHATSAPP_ACCESS_TOKEN: str | None = None
+    WHATSAPP_PHONE_NUMBER_ID: str | None = None
+    WHATSAPP_VERIFY_TOKEN: str | None = None
+    BOT_ENABLE_TELEGRAM: bool = False
+    BOT_ENABLE_WHATSAPP: bool = False
+    BOT_PUBLIC_MODE: bool = True
+    BOT_RATE_LIMIT_PER_MINUTE: int = 20
+
     BACKEND_CORS_ORIGINS: list[str] = [
         "http://localhost:8080",
         "http://127.0.0.1:8080",
