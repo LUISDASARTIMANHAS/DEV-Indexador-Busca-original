@@ -14,14 +14,15 @@ O sistema foi concebido como uma aplicação moderna e desacoplada, focada em se
 
 | Componente | Tecnologia | Motivação Principal |
 | --- | --- | --- |
-| **Linguagem** | Python 3.12 | Ecossistema vasto e alta produtividade. |
-| **Backend** | FastAPI | Performance, validação via Pydantic e Swagger nativo. |
-| **Banco de Dados** | PostgreSQL 15+ | Confiabilidade e suporte a Full-Text Search. |
-| **ORM** | SQLAlchemy 2.x | Mapeamento moderno e integração com Alembic. |
-| **Migrações** | Alembic | Versionamento de banco e reprodutibilidade. |
-| **Extração** | pdfplumber | Precisão na extração de texto de documentos PDF. |
-| **Segurança** | JWT (JOSE) | Autenticação stateless e segura. |
-| **Testes** | Pytest | Simplicidade e cobertura (pytest-cov). |
+| **Linguagem** | Python 3.10 / 3.11 | Compatível com o runtime do container e o ecossistema do backend. |
+| **Backend** | FastAPI 0.111.0 | Performance, validação via Pydantic e documentação automática. |
+| **Banco de Dados** | PostgreSQL | Confiabilidade e suporte a consultas relacionais e de texto. |
+| **ORM** | SQLAlchemy 2.0.49 | Mapeamento moderno e integração com sessions. |
+| **Migrações** | Alembic | Versionamento de banco e reprodutibilidade (presente nas dependências). |
+| **Validação** | Pydantic 2.7.1 | Modelos de dados e validação de request/response. |
+| **Segurança** | JWT / python-jose 3.5.0 | Autenticação stateless e geração de tokens. |
+| **Testes** | Pytest 8.2.1 | Simplicidade e cobertura para o backend. |
+| **Extração** | pdfplumber, python-docx | Parsers para documentos PDF e DOCX. |
 
 ---
 

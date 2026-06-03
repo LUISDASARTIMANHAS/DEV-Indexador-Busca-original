@@ -134,9 +134,24 @@ O objetivo e garantir comportamento previsivel, facilidade de refatoracao e segu
 
 - `backend/`: nucleo da API, dominio, servicos e pipelines.
 - `backend/pipeline_indexador/`: estrutura experimental/especializada para etapas de indexacao.
+- `backend/pipeline_busca/`: protótipo de busca em memória, separado do backend principal.
 - `docs/`: documentacao funcional, arquitetural e especificacoes do sistema.
 - `docker/`: estrutura reservada para orquestracao de ambiente.
 - `interface-web/`: frontend separado, responsavel pela interface de busca e operacao.
+
+## Como executar
+
+- Backend local: `cd backend && .\setup-dev.cmd` e em seguida `backend\start.cmd`.
+- Frontend local: `cd interface-web && npm install && npm run dev`.
+- Docker: use `docker compose up -d --build` na raiz do projeto.
+
+## Status atual
+
+- Autenticacao JWT e login com `POST /api/v1/auth/login` ja estao implementados.
+- `GET /api/v1/auth/me` expõe perfil do usuário autenticado.
+- `POST /api/v1/auth/logout` encerra sessões ativas.
+- O frontend suporta modo mock (`VITE_USE_MOCK_API=true`) e pode ser apontado para o backend real em `VITE_API_URL=http://localhost:8000`.
+- A especificação de API basica foi documentada em `docs/api_spec.md`.
 
 ## Frontend
 
