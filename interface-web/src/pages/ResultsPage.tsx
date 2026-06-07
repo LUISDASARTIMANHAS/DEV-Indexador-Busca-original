@@ -61,6 +61,10 @@ const formatModeLabel = (value?: string) => {
       return "Semântica";
     case "hybrid":
       return "Híbrida";
+    case "postgres_fts":
+      return "PostgreSQL FTS";
+    case "hybrid_postgres":
+      return "Híbrida PostgreSQL";
     case "bm25":
     default:
       return "BM25";
@@ -173,7 +177,7 @@ const ResultsPage = () => {
     dateFrom: searchParams.get("dateFrom") || undefined,
     dateTo: searchParams.get("dateTo") || undefined,
     sortBy: searchParams.get("sortBy") || undefined,
-    mode: (searchParams.get("mode") as SearchMode | null) || "bm25",
+    mode: (searchParams.get("mode") as SearchMode | null) || "postgres_fts",
     textWeight: searchParams.get("textWeight") ? Number(searchParams.get("textWeight")) : undefined,
     semanticWeight: searchParams.get("semanticWeight") ? Number(searchParams.get("semanticWeight")) : undefined,
     debugAnalysis: true,
@@ -314,8 +318,8 @@ const ResultsPage = () => {
                 {filters.dateFrom && <Badge variant="outline">Publicado após: {filters.dateFrom}</Badge>}
                 {filters.dateTo && <Badge variant="outline">Publicado até: {filters.dateTo}</Badge>}
                 {filters.sortBy && filters.sortBy !== "relevancia" && <Badge variant="outline">Ordenação: {formatSortLabel(filters.sortBy)}</Badge>}
-                {filters.mode === "hybrid" && filters.textWeight !== undefined && <Badge variant="outline">Textual: {filters.textWeight}</Badge>}
-                {filters.mode === "hybrid" && filters.semanticWeight !== undefined && <Badge variant="outline">Semântica: {filters.semanticWeight}</Badge>}
+                {(filters.mode === "hybrid" || filters.mode === "hybrid_postgres") && filters.textWeight !== undefined && <Badge variant="outline">{filters.mode === "hybrid_postgres" ? "PostgreSQL" : "Textual"}: {filters.textWeight}</Badge>}
+                {(filters.mode === "hybrid" || filters.mode === "hybrid_postgres") && filters.semanticWeight !== undefined && <Badge variant="outline">{filters.mode === "hybrid_postgres" ? "BM25" : "Semântica"}: {filters.semanticWeight}</Badge>}
               </div>
             )}
             {data.analysis && (
@@ -405,6 +409,12 @@ const ResultsPage = () => {
                         <span className="font-medium text-foreground">{doc.relevance}%</span>
                       </span>
                       <Badge variant="outline" className="text-xs px-2 py-0">Score {formatScore(doc.finalScore)}</Badge>
+                      {(doc.searchMode === "postgres_fts" || doc.searchMode === "hybrid_postgres") && (
+                        <Badge variant="outline" className="text-xs px-2 py-0">PostgreSQL {formatScore(doc.postgresScore)}</Badge>
+                      )}
+                      {doc.searchMode === "hybrid_postgres" && (
+                        <Badge variant="outline" className="text-xs px-2 py-0">BM25 {formatScore(doc.secondaryScore)}</Badge>
+                      )}
                       {(doc.searchMode === "hybrid" || doc.searchMode === "semantic") && (
                         <Badge variant="outline" className="text-xs px-2 py-0">Semântico {formatScore(doc.semanticScore)}</Badge>
                       )}
@@ -412,6 +422,11 @@ const ResultsPage = () => {
                         <Badge variant="outline" className="text-xs px-2 py-0">Textual {formatScore(doc.textualScore)}</Badge>
                       )}
                     </div>
+                    {doc.scoreExplanation && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {doc.scoreExplanation}
+                      </p>
+                    )}
                     <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-border pt-3">
                       <span className="mr-2 text-xs text-muted-foreground">Avaliar relevância</span>
                       {[1, 2, 3, 4, 5].map((rating) => (

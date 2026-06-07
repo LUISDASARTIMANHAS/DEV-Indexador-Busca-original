@@ -14,6 +14,7 @@ import type {
   SearchHistoryFilters,
   SearchHistoryResponse,
   SearchHistoryItem,
+  SearchCompareResponse,
   SearchResponse,
   SearchResult,
   SessionUser,
@@ -180,7 +181,7 @@ export const mockSearch = (
   } = {},
 ): SearchResponse => {
   const normalized = normalizeMockText(query.trim());
-  const mode = filters.mode || "bm25";
+  const mode = filters.mode || "postgres_fts";
   const queryTerms = normalized.split(/\s+/).filter(Boolean);
   const filtered = normalized === "xyz123"
     ? []
@@ -224,24 +225,43 @@ export const mockSearch = (
   const start = (safePage - 1) * perPage;
   const items = filtered.slice(start, start + perPage).map((result, index) => {
     const baseScore = Math.max(result.relevance / 100, 0.01);
-    const textualScore = mode === "semantic" ? 0 : baseScore * (1 + index * 0.02);
-    const semanticScore = mode === "frequency" || mode === "tfidf" || mode === "bm25"
+    const postgresScore = mode === "postgres_fts" || mode === "hybrid_postgres" ? baseScore * (1.05 - index * 0.01) : 0;
+    const textualScore = mode === "semantic" || mode === "postgres_fts" ? 0 : baseScore * (1 + index * 0.02);
+    const semanticScore = mode === "frequency" || mode === "tfidf" || mode === "bm25" || mode === "postgres_fts" || mode === "hybrid_postgres"
       ? 0
       : Math.max(0.1, baseScore - index * 0.03);
-    const finalScore = mode === "hybrid"
+    const finalScore = mode === "hybrid_postgres"
+      ? ((filters.textWeight ?? 0.7) * postgresScore) + ((filters.semanticWeight ?? 0.3) * textualScore)
+      : mode === "hybrid"
       ? ((filters.textWeight ?? 0.6) * textualScore) + ((filters.semanticWeight ?? 0.4) * semanticScore)
       : mode === "semantic"
         ? semanticScore
+        : mode === "postgres_fts"
+          ? postgresScore
         : textualScore;
 
     return {
       ...result,
       documentId: result.id,
+      score: finalScore,
       textualScore,
       semanticScore,
+      postgresScore,
+      secondaryScore: mode === "hybrid_postgres" ? textualScore : 0,
       finalScore,
       searchMode: mode,
       matchedTerms: queryTerms,
+      scoreExplanation: mode === "postgres_fts"
+        ? "Relevância calculada pelo PostgreSQL Full-Text Search com índice GIN."
+        : mode === "hybrid_postgres"
+          ? "Score final combina PostgreSQL FTS com BM25."
+          : "Relevância calculada pela estratégia selecionada.",
+      metadata: {
+        type: result.type,
+        category: result.category,
+        author: result.author,
+        date: result.date,
+      },
     };
   });
 
@@ -258,6 +278,46 @@ export const mockSearch = (
     responseTimeMs: 150 + Math.floor(Math.random() * 100),
     items,
     results: items,
+  };
+};
+
+export const mockSearchCompare = (
+  query: string,
+  filters: {
+    modes?: string[];
+    category?: string;
+    documentType?: string;
+    author?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    limit?: number;
+  } = {},
+): SearchCompareResponse => {
+  const modes = filters.modes?.length ? filters.modes : ["frequency", "bm25", "postgres_fts", "hybrid_postgres"];
+  const results_by_mode = Object.fromEntries(
+    modes.map((mode) => [
+      mode,
+      mockSearch(query, 1, filters.limit ?? 5, {
+        ...filters,
+        mode,
+        debugAnalysis: true,
+      }).items,
+    ]),
+  );
+  return {
+    query,
+    analysis: analyzeMockQuery(query),
+    compared_modes: modes,
+    results_by_mode,
+    summary: {
+      best_mode_by_top_score: "hybrid_postgres",
+      notes: [
+        "frequency valoriza repetição simples de termos",
+        "bm25 considera frequência, raridade e tamanho do documento",
+        "postgres_fts usa índice GIN persistente e ranking nativo",
+        "hybrid_postgres combina sinais de relevância",
+      ],
+    },
   };
 };
 

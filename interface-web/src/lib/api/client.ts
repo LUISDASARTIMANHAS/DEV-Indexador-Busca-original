@@ -8,7 +8,7 @@ type RequestOptions = {
   body?: unknown;
   headers?: Record<string, string>;
   token?: string;
-  query?: Record<string, string | number | undefined>;
+  query?: Record<string, string | number | string[] | undefined>;
 };
 
 export const authSessionExpiredEvent = "ifesdoc:session-expired";
@@ -43,7 +43,13 @@ export const buildApiUrl = (path: string, query?: RequestOptions["query"]) => {
 
   if (query) {
     for (const [key, value] of Object.entries(query)) {
-      if (value !== undefined && value !== "") {
+      if (Array.isArray(value)) {
+        value.forEach((item) => {
+          if (item !== "") {
+            url.searchParams.append(key, item);
+          }
+        });
+      } else if (value !== undefined && value !== "") {
         url.searchParams.set(key, String(value));
       }
     }

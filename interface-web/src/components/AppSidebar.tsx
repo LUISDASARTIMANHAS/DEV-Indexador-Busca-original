@@ -1,6 +1,7 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   Search,
+  GitCompareArrows,
   FileUp,
   Database,
   BarChart3,
@@ -14,6 +15,7 @@ import { appEnv } from "@/lib/env";
 
 const navItems = [
   { title: "Busca", path: "/busca", icon: Search, adminOnly: false },
+  { title: "Comparar Busca", path: "/comparar-busca", icon: GitCompareArrows, adminOnly: false },
   { title: "Ingestão", path: "/ingestao", icon: FileUp, adminOnly: true },
   { title: "Indexação", path: "/indexacao", icon: Database, adminOnly: true },
   { title: "Métricas", path: "/metricas", icon: BarChart3, adminOnly: true },

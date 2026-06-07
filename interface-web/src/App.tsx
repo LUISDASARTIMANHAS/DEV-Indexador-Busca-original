@@ -12,6 +12,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const SearchPage = lazy(() => import("./pages/SearchPage"));
+const SearchComparePage = lazy(() => import("./pages/SearchComparePage"));
 const ResultsPage = lazy(() => import("./pages/ResultsPage"));
 const DocumentViewPage = lazy(() => import("./pages/DocumentViewPage"));
 const IngestionPage = lazy(() => import("./pages/IngestionPage"));
@@ -46,6 +47,7 @@ const App = () => (
               <Route element={<ProtectedRoute />}>
                 <Route element={<AppLayout />}>
                   <Route path="/busca" element={<SearchPage />} />
+                  <Route path="/comparar-busca" element={<SearchComparePage />} />
                   <Route path="/resultados" element={<ResultsPage />} />
                   <Route path="/documento/:id" element={<DocumentViewPage />} />
                   <Route path="/historico" element={<HistoryPage />} />

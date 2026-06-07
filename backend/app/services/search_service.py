@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.logging import logger
 from app.repositories.document_repository import DocumentRepository
+from app.repositories.postgres_search_repository import PostgresSearchRepository
 from app.repositories.search_repository import SearchRepository
 from app.domain.user import User
 from app.schemas.query_schema import QueryAnalysisResult
@@ -15,7 +16,9 @@ from app.services.query_analyzer_service import query_analyzer
 from app.services.semantic_search_service import semantic_search_service
 from app.strategies.bm25_strategy import BM25RankingStrategy
 from app.strategies.frequency_strategy import FrequencyRankingStrategy
+from app.strategies.hybrid_postgres_strategy import HybridPostgresSearchStrategy
 from app.strategies.hybrid_strategy import HybridRankingStrategy
+from app.strategies.postgres_fts_strategy import PostgresFTSSearchStrategy
 from app.strategies.tfidf_strategy import TFIDFRankingStrategy
 from app.utils.text_processing import normalize_text
 
@@ -28,12 +31,14 @@ class SearchService:
         self.repository = repository
         self.document_repository = DocumentRepository()
         self.semantic_search_service = semantic_search_service
+        self.postgres_fts_strategy = PostgresFTSSearchStrategy(PostgresSearchRepository())
         self.textual_strategies = {
             "frequency": FrequencyRankingStrategy(),
             "tfidf": TFIDFRankingStrategy(),
             "bm25": BM25RankingStrategy(),
         }
         self.hybrid_strategy = HybridRankingStrategy()
+        self.hybrid_postgres_strategy = HybridPostgresSearchStrategy()
 
     def search(
         self,
@@ -49,7 +54,7 @@ class SearchService:
         date_from: date | str | None = None,
         date_to: date | str | None = None,
         sort_by: str | None = None,
-        mode: str = "bm25",
+        mode: str = "postgres_fts",
         text_weight: float = 0.6,
         semantic_weight: float = 0.4,
         debug_analysis: bool = False,
@@ -82,7 +87,7 @@ class SearchService:
             )
 
         terms = self._terms_for_retrieval(analysis)
-        if not terms and search_mode not in {"semantic", "hybrid"}:
+        if not terms and search_mode not in {"semantic", "hybrid", "postgres_fts", "hybrid_postgres"}:
             response_time_ms = self._elapsed_response_time_ms(started_at)
             response = self._empty_response(
                 query=query,
@@ -123,17 +128,15 @@ class SearchService:
         )
         normalized_date_from = self._coerce_date_boundary(date_from, end_of_day=False)
         normalized_date_to = self._coerce_date_boundary(date_to, end_of_day=True)
-        ranked_items = self._rank_by_mode(
+        ranked_payloads = self._ranked_payloads_by_mode(
             db,
             query=query,
             terms=terms,
+            analysis=analysis,
             mode=search_mode,
             text_weight=text_weight,
             semantic_weight=semantic_weight,
-        )
-        ranked_payloads = self._load_ranked_payloads(
-            db,
-            ranked_items,
+            limit=max(page * limit, limit),
             category=category,
             document_type=document_type,
             author=author,
@@ -168,7 +171,7 @@ class SearchService:
                     "snippet": self._build_snippet(
                         snippet_source,
                         matched_terms,
-                    ),
+                    ) if not item.get("snippet") else item["snippet"],
                     "category": payload["category"],
                     "type": payload["type"],
                     "documentType": payload["document_type"],
@@ -181,13 +184,25 @@ class SearchService:
                     "textualScore": textual_score,
                     "semanticScore": semantic_score,
                     "finalScore": final_score,
+                    "postgresScore": item.get("postgres_score"),
+                    "secondaryScore": item.get("secondary_score"),
+                    "score": final_score,
                     "searchMode": search_mode,
                     "matchedTerms": matched_terms,
+                    "scoreExplanation": self._score_explanation(search_mode),
                     "textual_score": textual_score,
                     "semantic_score": semantic_score,
                     "final_score": final_score,
+                    "postgres_score": item.get("postgres_score"),
+                    "secondary_score": item.get("secondary_score"),
                     "search_mode": search_mode,
                     "matched_terms": matched_terms,
+                    "metadata": {
+                        "type": payload["type"],
+                        "category": payload["category"],
+                        "author": payload["author_name"],
+                        "date": self._effective_document_date(payload).isoformat(),
+                    },
                 }
             )
 
@@ -238,6 +253,85 @@ class SearchService:
 
     def analyze_query(self, query: str) -> QueryAnalysisResult:
         return query_analyzer.analyze(query)
+
+    def compare_strategies(
+        self,
+        db: Session,
+        *,
+        query: str,
+        user_id: int,
+        modes: list[str] | None = None,
+        limit: int = 5,
+        category: str | None = None,
+        document_type: str | None = None,
+        author: str | None = None,
+        date_from: date | str | None = None,
+        date_to: date | str | None = None,
+        year: int | None = None,
+    ) -> dict:
+        compared_modes = modes or ["frequency", "bm25", "postgres_fts", "hybrid_postgres"]
+        supported_modes = set(self.textual_strategies) | {"semantic", "hybrid", "postgres_fts", "hybrid_postgres"}
+        results_by_mode: dict[str, list | dict] = {}
+        best_mode = None
+        best_score = -1.0
+
+        if year and not date_from and not date_to:
+            date_from = f"{year}-01-01"
+            date_to = f"{year}-12-31"
+
+        for mode in compared_modes:
+            normalized_mode = normalize_text(mode)
+            if normalized_mode not in supported_modes:
+                results_by_mode[mode] = {
+                    "mode": mode,
+                    "available": False,
+                    "reason": "Estratégia não implementada neste ambiente.",
+                }
+                continue
+            try:
+                response = self.search(
+                    db,
+                    query=query,
+                    user_id=user_id,
+                    category=category,
+                    document_type=document_type,
+                    author=author,
+                    date_from=date_from,
+                    date_to=date_to,
+                    mode=normalized_mode,
+                    limit=limit,
+                    page=1,
+                    debug_analysis=False,
+                )
+                items = response.get("items", [])
+                results_by_mode[normalized_mode] = items
+                top_score = float(items[0].get("finalScore", items[0].get("score", 0.0)) or 0.0) if items else 0.0
+                if top_score > best_score:
+                    best_score = top_score
+                    best_mode = normalized_mode
+            except Exception as exc:
+                logger.exception("Search compare failed mode=%s query=%s", normalized_mode, query)
+                results_by_mode[normalized_mode] = {
+                    "mode": normalized_mode,
+                    "available": False,
+                    "reason": str(exc),
+                }
+
+        return {
+            "query": query,
+            "analysis": self._analysis_summary(query_analyzer.analyze(query)),
+            "compared_modes": compared_modes,
+            "results_by_mode": results_by_mode,
+            "summary": {
+                "best_mode_by_top_score": best_mode,
+                "notes": [
+                    "frequency valoriza repetição simples de termos",
+                    "bm25 considera frequência, raridade e tamanho do documento",
+                    "postgres_fts usa índice GIN persistente e ranking nativo",
+                    "hybrid_postgres combina sinais de relevância",
+                ],
+            },
+        }
 
     def _terms_for_retrieval(self, analysis: QueryAnalysisResult) -> list[str]:
         phrase_terms = [
@@ -290,6 +384,145 @@ class SearchService:
             )
 
         return self._rank_textual(db, terms=terms, mode=mode)
+
+    def _ranked_payloads_by_mode(
+        self,
+        db: Session,
+        *,
+        query: str,
+        terms: list[str],
+        analysis: QueryAnalysisResult,
+        mode: str,
+        text_weight: float,
+        semantic_weight: float,
+        limit: int,
+        category: str | None,
+        document_type: str | None,
+        author: str | None,
+        date_from: datetime | None,
+        date_to: datetime | None,
+    ) -> list[dict]:
+        if mode == "postgres_fts":
+            filters = self._fts_filters(category, document_type, author, date_from, date_to, analysis)
+            ranked_items = self.postgres_fts_strategy.search(
+                db,
+                query=query,
+                analysis=analysis,
+                filters=filters,
+                limit=max(limit, 1),
+            )
+            return self._ranked_items_to_payloads(
+                db,
+                ranked_items,
+                category=category,
+                document_type=document_type,
+                author=author,
+                date_from=date_from,
+                date_to=date_to,
+            )
+
+        if mode == "hybrid_postgres":
+            filters = self._fts_filters(category, document_type, author, date_from, date_to, analysis)
+            postgres_items = self.postgres_fts_strategy.search(
+                db,
+                query=query,
+                analysis=analysis,
+                filters=filters,
+                limit=max(limit, 25),
+            )
+            secondary_items = self._rank_textual(db, terms=terms, mode="bm25") if terms else []
+            ranked_items = self.hybrid_postgres_strategy.combine(
+                postgres_items=postgres_items,
+                secondary_items=secondary_items,
+                postgres_weight=text_weight if text_weight is not None else 0.7,
+                secondary_weight=semantic_weight if semantic_weight is not None else 0.3,
+            )
+            return self._ranked_items_to_payloads(
+                db,
+                ranked_items,
+                category=category,
+                document_type=document_type,
+                author=author,
+                date_from=date_from,
+                date_to=date_to,
+            )
+
+        ranked_items = self._rank_by_mode(
+            db,
+            query=query,
+            terms=terms,
+            mode=mode,
+            text_weight=text_weight,
+            semantic_weight=semantic_weight,
+        )
+        return self._load_ranked_payloads(
+            db,
+            ranked_items,
+            category=category,
+            document_type=document_type,
+            author=author,
+            date_from=date_from,
+            date_to=date_to,
+        )
+
+    def _ranked_items_to_payloads(
+        self,
+        db: Session,
+        ranked_items: list[dict],
+        *,
+        category: str | None,
+        document_type: str | None,
+        author: str | None,
+        date_from: datetime | None,
+        date_to: datetime | None,
+    ) -> list[dict]:
+        ranked_payloads: list[dict] = []
+        for item in ranked_items:
+            payload = item.get("payload") or self.document_repository.get_document_payload(db, item["document_id"])
+            if payload is None:
+                continue
+            if not self._matches_filters(
+                payload,
+                category=category,
+                document_type=document_type,
+                author=author,
+                date_from=date_from,
+                date_to=date_to,
+            ):
+                continue
+            ranked_payloads.append(
+                {
+                    "document_id": item["document_id"],
+                    "score": item.get("score", item.get("final_score", 0.0)),
+                    "textual_score": item.get("textual_score", 0.0),
+                    "semantic_score": item.get("semantic_score", 0.0),
+                    "postgres_score": item.get("postgres_score"),
+                    "secondary_score": item.get("secondary_score"),
+                    "final_score": item.get("final_score", item.get("score", 0.0)),
+                    "matched_terms": set(item.get("matched_terms", set())),
+                    "snippet": item.get("snippet"),
+                    "payload": payload,
+                }
+            )
+        return ranked_payloads
+
+    def _fts_filters(
+        self,
+        category: str | None,
+        document_type: str | None,
+        author: str | None,
+        date_from: datetime | None,
+        date_to: datetime | None,
+        analysis: QueryAnalysisResult,
+    ) -> dict:
+        return {
+            "category": category,
+            "document_type": document_type,
+            "author": author,
+            "date_from": date_from,
+            "date_to": date_to,
+            "year": analysis.filters.year,
+        }
 
     def _rank_textual(self, db: Session, *, terms: list[str], mode: str) -> list[dict]:
         if not terms:
@@ -370,10 +603,10 @@ class SearchService:
         }
 
     def _normalize_mode(self, mode: str | None) -> str:
-        normalized_mode = normalize_text(mode or "bm25")
-        if normalized_mode in self.textual_strategies or normalized_mode in {"semantic", "hybrid"}:
+        normalized_mode = normalize_text(mode or "postgres_fts")
+        if normalized_mode in self.textual_strategies or normalized_mode in {"semantic", "hybrid", "postgres_fts", "hybrid_postgres"}:
             return normalized_mode
-        return "bm25"
+        return "postgres_fts"
 
     def list_recent_searches(self, db: Session, *, user_id: int, limit: int = 10) -> list[dict]:
         rows = self.repository.list_recent_searches(db, user_id=user_id, limit=limit)
@@ -613,6 +846,18 @@ class SearchService:
             "intent": analysis.intent,
             "warnings": analysis.warnings,
         }
+
+    def _score_explanation(self, mode: str) -> str:
+        explanations = {
+            "postgres_fts": "Relevância calculada pelo PostgreSQL Full-Text Search com vetor textual indexado e ranking nativo.",
+            "hybrid_postgres": "Score final combina PostgreSQL Full-Text Search com BM25 normalizado.",
+            "bm25": "BM25 considera frequência dos termos, raridade e tamanho do documento.",
+            "tfidf": "TF-IDF combina frequência do termo com raridade na coleção.",
+            "frequency": "Frequência simples valoriza repetição dos termos buscados.",
+            "semantic": "Busca semântica usa similaridade vetorial quando embeddings estão disponíveis.",
+            "hybrid": "Busca híbrida combina sinais textuais e semânticos.",
+        }
+        return explanations.get(mode, "Relevância calculada pela estratégia de busca selecionada.")
 
     def _sort_ranked_payloads(self, ranked_payloads: list[dict], *, sort_by: str | None) -> list[dict]:
         if sort_by == "data-desc":

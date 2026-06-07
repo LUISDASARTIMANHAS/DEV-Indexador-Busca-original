@@ -26,6 +26,13 @@ export const useSearchResults = (query: string, filters: SearchFilters) =>
     enabled: !!query.trim(),
   });
 
+export const useSearchCompare = (query: string, filters: SearchFilters & { modes?: string[] }) =>
+  useQuery({
+    queryKey: ["search-compare", query, filters],
+    queryFn: () => searchService.compare(query, filters),
+    enabled: !!query.trim(),
+  });
+
 export const useSearchHistory = (filters: SearchHistoryFilters) =>
   useQuery({
     queryKey: ["search-history", filters],

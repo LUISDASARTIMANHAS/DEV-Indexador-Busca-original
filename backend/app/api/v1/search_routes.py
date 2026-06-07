@@ -10,6 +10,7 @@ from app.domain.user import User
 from app.domain.user_role import UserRole
 from app.schemas.query_schema import QueryAnalysisRequest, QueryAnalysisResult
 from app.schemas.search_schema import (
+    SearchCompareResponse,
     SearchHistoryItemResponse,
     SearchHistoryListResponse,
     SearchResponse,
@@ -24,9 +25,10 @@ router = APIRouter(prefix="/search", tags=["Search"])
 @router.get("/", response_model=SearchResponse)
 def search_documents(
     q: str = Query(..., min_length=1, description="Consulta de busca"),
-    mode: str = Query("bm25", pattern="^(frequency|tfidf|bm25|semantic|hybrid)$"),
+    mode: str = Query("postgres_fts", pattern="^(frequency|tfidf|bm25|semantic|hybrid|postgres_fts|hybrid_postgres)$"),
     category: str | None = Query(default=None),
     type_: str | None = Query(default=None, alias="type"),
+    year: int | None = Query(default=None, ge=1900, le=2100),
     documentType: str | None = Query(default=None),
     document_type: str | None = Query(default=None, alias="document_type"),
     author: str | None = Query(default=None),
@@ -47,8 +49,8 @@ def search_documents(
     current_user: User = Depends(get_current_user),
 ):
     resolved_document_type = documentType or document_type or type_
-    resolved_date_from = dateFrom or date_from
-    resolved_date_to = dateTo or date_to
+    resolved_date_from = dateFrom or date_from or (date(year, 1, 1) if year else None)
+    resolved_date_to = dateTo or date_to or (date(year, 12, 31) if year else None)
     resolved_sort_by = sortBy or sort_by
     resolved_text_weight = text_weight if text_weight is not None else (textWeight if textWeight is not None else 0.6)
     resolved_semantic_weight = (
@@ -96,6 +98,49 @@ def analyze_search_query(
 ):
     logger.info("Search query analysis requested by user=%s", current_user.email)
     return search_service.analyze_query(payload.query)
+
+
+@router.get("/compare", response_model=SearchCompareResponse)
+def compare_search_strategies(
+    q: str = Query(..., min_length=1, description="Consulta de busca"),
+    modes: list[str] | None = Query(default=None),
+    category: str | None = Query(default=None),
+    type_: str | None = Query(default=None, alias="type"),
+    documentType: str | None = Query(default=None),
+    document_type: str | None = Query(default=None, alias="document_type"),
+    author: str | None = Query(default=None),
+    year: int | None = Query(default=None, ge=1900, le=2100),
+    dateFrom: date | None = Query(default=None),
+    dateTo: date | None = Query(default=None),
+    date_from: date | None = Query(default=None, alias="date_from"),
+    date_to: date | None = Query(default=None, alias="date_to"),
+    limit: int = Query(5, ge=1, le=20),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    resolved_document_type = documentType or document_type or type_
+    resolved_date_from = dateFrom or date_from or (date(year, 1, 1) if year else None)
+    resolved_date_to = dateTo or date_to or (date(year, 12, 31) if year else None)
+    logger.info(
+        "Search compare requested by user=%s query=%s modes=%s limit=%s",
+        current_user.email,
+        q,
+        modes,
+        limit,
+    )
+    return search_service.compare_strategies(
+        db,
+        query=q,
+        user_id=current_user.cod_usuario,
+        modes=modes,
+        limit=limit,
+        category=category,
+        document_type=resolved_document_type,
+        author=author,
+        date_from=resolved_date_from,
+        date_to=resolved_date_to,
+        year=year,
+    )
 
 
 @router.post("/reindex")

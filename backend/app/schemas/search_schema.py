@@ -21,13 +21,20 @@ class SearchResultResponse(BaseModel):
     textualScore: float | None = None
     semanticScore: float | None = None
     finalScore: float | None = None
+    postgresScore: float | None = None
+    secondaryScore: float | None = None
+    score: float | None = None
     searchMode: str | None = None
     matchedTerms: list[str] | None = None
+    scoreExplanation: str | None = None
     textual_score: float | None = None
     semantic_score: float | None = None
     final_score: float | None = None
+    postgres_score: float | None = None
+    secondary_score: float | None = None
     search_mode: str | None = None
     matched_terms: list[str] | None = None
+    metadata: dict | None = None
 
 
 class SearchResponse(BaseModel):
@@ -78,3 +85,23 @@ class SearchHistoryListResponse(BaseModel):
     perPage: int
     totalPages: int
     items: list[SearchHistoryEntryResponse]
+
+
+class SearchCompareModeResponse(BaseModel):
+    mode: str
+    available: bool = True
+    reason: str | None = None
+    results: list[SearchResultResponse] | None = None
+
+
+class SearchCompareSummaryResponse(BaseModel):
+    best_mode_by_top_score: str | None = None
+    notes: list[str]
+
+
+class SearchCompareResponse(BaseModel):
+    query: str
+    analysis: SearchAnalysisSummary | None = None
+    compared_modes: list[str]
+    results_by_mode: dict[str, list[SearchResultResponse] | dict]
+    summary: SearchCompareSummaryResponse

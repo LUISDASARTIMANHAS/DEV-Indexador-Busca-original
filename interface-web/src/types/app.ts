@@ -24,11 +24,12 @@ export type SearchFilters = {
   textWeight?: number;
   semanticWeight?: number;
   debugAnalysis?: boolean;
+  year?: number;
   limit?: number;
   page?: number;
 };
 
-export type SearchMode = "frequency" | "tfidf" | "bm25" | "semantic" | "hybrid";
+export type SearchMode = "frequency" | "tfidf" | "bm25" | "semantic" | "hybrid" | "postgres_fts" | "hybrid_postgres";
 
 export type SearchResult = {
   id: number;
@@ -44,11 +45,16 @@ export type SearchResult = {
   size: string;
   date: string;
   relevance: number;
+  score?: number;
   textualScore?: number;
   semanticScore?: number;
   finalScore?: number;
+  postgresScore?: number;
+  secondaryScore?: number;
   searchMode?: SearchMode | string;
   matchedTerms?: string[];
+  scoreExplanation?: string;
+  metadata?: Record<string, unknown>;
 };
 
 export type QueryFilters = {
@@ -82,6 +88,17 @@ export type SearchResponse = {
   responseTimeMs: number;
   items: SearchResult[];
   results?: SearchResult[];
+};
+
+export type SearchCompareResponse = {
+  query: string;
+  analysis?: SearchAnalysis | null;
+  compared_modes: string[];
+  results_by_mode: Record<string, SearchResult[] | { mode: string; available: false; reason: string }>;
+  summary: {
+    best_mode_by_top_score?: string | null;
+    notes: string[];
+  };
 };
 
 export type RelevanceFeedbackPayload = {

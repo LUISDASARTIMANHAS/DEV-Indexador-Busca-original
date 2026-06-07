@@ -238,6 +238,80 @@ def test_search_debug_analysis_includes_analyzer_summary(tmp_path: Path):
         assert payload["analysis"]["intent"] == "search_with_filters"
 
 
+def test_search_supports_postgres_fts_and_hybrid_postgres_modes(tmp_path: Path):
+    for client in _client_fixture(tmp_path):
+        token = _login(client)
+        _upload_with_metadata(
+            client,
+            token,
+            "relatorio-estagio-2025.txt",
+            b"Relatorio de estagio supervisionado com acompanhamento academico.",
+            category="academico",
+            document_type="Relatorio",
+            document_date="2025-05-10",
+        )
+
+        fts_payload = _search(
+            client,
+            token,
+            "estagio supervisionado",
+            mode="postgres_fts",
+            debug_analysis=True,
+        )
+        assert fts_payload["mode"] == "postgres_fts"
+        assert fts_payload["items"][0]["searchMode"] == "postgres_fts"
+        assert fts_payload["items"][0]["postgresScore"] is not None
+        assert "<mark>" in fts_payload["items"][0]["snippet"]
+
+        hybrid_payload = _search(
+            client,
+            token,
+            "estagio supervisionado",
+            mode="hybrid_postgres",
+            textWeight=0.7,
+            semanticWeight=0.3,
+        )
+        assert hybrid_payload["mode"] == "hybrid_postgres"
+        assert hybrid_payload["items"][0]["searchMode"] == "hybrid_postgres"
+        assert "secondaryScore" in hybrid_payload["items"][0]
+
+
+def test_search_compare_endpoint_returns_results_by_strategy(tmp_path: Path):
+    for client in _client_fixture(tmp_path):
+        token = _login(client)
+        _upload_with_metadata(
+            client,
+            token,
+            "manual-estagio.txt",
+            b"Manual de estagio supervisionado com regras institucionais.",
+            category="academico",
+            document_type="Manual",
+            document_date="2025-06-01",
+        )
+
+        response = client.get(
+            "/api/v1/search/compare",
+            headers={"Authorization": f"Bearer {token}"},
+            params=[
+                ("q", "estagio supervisionado"),
+                ("limit", "5"),
+                ("modes", "frequency"),
+                ("modes", "bm25"),
+                ("modes", "postgres_fts"),
+                ("modes", "hybrid_postgres"),
+                ("modes", "unknown_mode"),
+            ],
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["query"] == "estagio supervisionado"
+        assert payload["results_by_mode"]["postgres_fts"][0]["searchMode"] == "postgres_fts"
+        assert payload["results_by_mode"]["hybrid_postgres"][0]["searchMode"] == "hybrid_postgres"
+        assert payload["results_by_mode"]["unknown_mode"]["available"] is False
+        assert any("postgres_fts usa índice GIN" in note for note in payload["summary"]["notes"])
+
+
 def test_search_supports_author_filter_and_detailed_history(tmp_path: Path):
     for client in _client_fixture(tmp_path):
         token = _login(client)

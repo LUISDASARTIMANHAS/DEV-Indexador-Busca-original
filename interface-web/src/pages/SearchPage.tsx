@@ -17,9 +17,9 @@ const SearchPage = () => {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [sortBy, setSortBy] = useState("relevancia");
-  const [mode, setMode] = useState("bm25");
-  const [textWeight, setTextWeight] = useState("0.6");
-  const [semanticWeight, setSemanticWeight] = useState("0.4");
+  const [mode, setMode] = useState("postgres_fts");
+  const [textWeight, setTextWeight] = useState("0.7");
+  const [semanticWeight, setSemanticWeight] = useState("0.3");
   const [limit, setLimit] = useState("20");
   const { data: recentSearches = [] } = useRecentSearches();
 
@@ -46,7 +46,7 @@ const SearchPage = () => {
         params.set("sortBy", sortBy);
       }
       params.set("mode", mode);
-      if (mode === "hybrid") {
+      if (mode === "hybrid" || mode === "hybrid_postgres") {
         params.set("textWeight", textWeight);
         params.set("semanticWeight", semanticWeight);
       }
@@ -140,15 +140,17 @@ const SearchPage = () => {
                     <SelectItem value="frequency">Frequência</SelectItem>
                     <SelectItem value="tfidf">TF-IDF</SelectItem>
                     <SelectItem value="bm25">BM25</SelectItem>
+                    <SelectItem value="postgres_fts">PostgreSQL FTS</SelectItem>
+                    <SelectItem value="hybrid_postgres">Híbrida PostgreSQL</SelectItem>
                     <SelectItem value="semantic">Semântica</SelectItem>
                     <SelectItem value="hybrid">Híbrida</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              {mode === "hybrid" && (
+              {(mode === "hybrid" || mode === "hybrid_postgres") && (
                 <>
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Peso textual</Label>
+                    <Label className="text-xs">{mode === "hybrid_postgres" ? "Peso PostgreSQL" : "Peso textual"}</Label>
                     <Input
                       type="number"
                       min="0"
@@ -160,7 +162,7 @@ const SearchPage = () => {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Peso semântico</Label>
+                    <Label className="text-xs">{mode === "hybrid_postgres" ? "Peso BM25" : "Peso semântico"}</Label>
                     <Input
                       type="number"
                       min="0"

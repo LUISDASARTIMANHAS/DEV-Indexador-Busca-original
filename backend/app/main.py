@@ -13,7 +13,7 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.database import Base, SessionLocal, engine
 from app.core.logging import logger
-from app.core.schema import ensure_version_file_metadata_columns
+from app.core.schema import ensure_full_text_search_schema, ensure_version_file_metadata_columns
 from app.core.security import hash_password
 from app.domain.administrative_history import AdministrativeHistory
 from app.domain.bot_conversation import BotConversation
@@ -69,6 +69,7 @@ async def lifespan(_: FastAPI):
     try:
         Base.metadata.create_all(bind=engine)
         ensure_version_file_metadata_columns(engine)
+        ensure_full_text_search_schema(engine)
         ensure_initial_admin()
         logger.info("Banco de dados inicializado com sucesso")
     except OperationalError as exc:

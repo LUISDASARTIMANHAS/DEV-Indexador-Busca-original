@@ -13,6 +13,7 @@ import {
   mockNotifications,
   mockRecentSearches,
   mockSearch,
+  mockSearchCompare,
   mockSearchHistory,
   mockSessionUser,
   mockUsers,
@@ -45,6 +46,7 @@ import type {
   SearchHistoryFilters,
   SearchHistoryResponse,
   SearchHistoryItem,
+  SearchCompareResponse,
   SearchResponse,
   SessionUser,
   UploadedDocument,
@@ -207,8 +209,33 @@ export const searchService = {
         textWeight: filters.textWeight,
         semanticWeight: filters.semanticWeight,
         debug_analysis: filters.debugAnalysis,
+        year: filters.year,
         limit: filters.limit,
         page: filters.page,
+      },
+    });
+  },
+
+  async compare(
+    query: string,
+    filters: SearchFilters & { modes?: string[] } = {},
+  ): Promise<SearchCompareResponse> {
+    if (shouldUseMocks()) {
+      await delay();
+      return mockSearchCompare(query, filters);
+    }
+
+    return apiRequest<SearchCompareResponse>("/api/v1/search/compare", {
+      query: {
+        q: query,
+        modes: filters.modes,
+        category: filters.category,
+        documentType: filters.documentType,
+        author: filters.author,
+        dateFrom: filters.dateFrom,
+        dateTo: filters.dateTo,
+        year: filters.year,
+        limit: filters.limit,
       },
     });
   },
