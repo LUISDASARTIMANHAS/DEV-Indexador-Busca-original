@@ -190,6 +190,8 @@ class SearchService:
                     "searchMode": search_mode,
                     "matchedTerms": matched_terms,
                     "scoreExplanation": self._score_explanation(search_mode),
+                    "ocrExecuted": bool(payload.get("ocr_executado")),
+                    "textSource": "ocr" if payload.get("ocr_executado") and payload.get("ocr_status") == "success" else "native",
                     "textual_score": textual_score,
                     "semantic_score": semantic_score,
                     "final_score": final_score,
@@ -202,6 +204,9 @@ class SearchService:
                         "category": payload["category"],
                         "author": payload["author_name"],
                         "date": self._effective_document_date(payload).isoformat(),
+                        "ocr_executed": bool(payload.get("ocr_executado")),
+                        "ocr_status": payload.get("ocr_status"),
+                        "text_source": "ocr" if payload.get("ocr_executado") and payload.get("ocr_status") == "success" else "native",
                     },
                 }
             )

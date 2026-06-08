@@ -9,6 +9,16 @@ _VERSION_FILE_METADATA_COLUMNS = {
     "hash_arquivo": "VARCHAR(64)",
 }
 
+_OCR_COLUMNS = {
+    "ocr_executado": "BOOLEAN DEFAULT FALSE NOT NULL",
+    "ocr_status": "VARCHAR(50)",
+    "ocr_idioma": "VARCHAR(20)",
+    "ocr_paginas_processadas": "INTEGER",
+    "ocr_tempo_ms": "INTEGER",
+    "ocr_erro": "TEXT",
+    "ocr_executado_em": "TIMESTAMP",
+}
+
 
 def ensure_version_file_metadata_columns(engine: Engine) -> None:
     existing_columns = {
@@ -18,6 +28,33 @@ def ensure_version_file_metadata_columns(engine: Engine) -> None:
     missing_columns = [
         (column_name, column_type)
         for column_name, column_type in _VERSION_FILE_METADATA_COLUMNS.items()
+        if column_name not in existing_columns
+    ]
+    if not missing_columns:
+        return
+
+    with engine.begin() as connection:
+        for column_name, column_type in missing_columns:
+            connection.execute(
+                text(
+                    f"ALTER TABLE historico_documento "
+                    f"ADD COLUMN {column_name} {column_type}"
+                )
+            )
+
+
+def ensure_ocr_schema(engine: Engine) -> None:
+    inspector = inspect(engine)
+    if not inspector.has_table("historico_documento"):
+        return
+
+    existing_columns = {
+        column["name"]
+        for column in inspector.get_columns("historico_documento")
+    }
+    missing_columns = [
+        (column_name, column_type)
+        for column_name, column_type in _OCR_COLUMNS.items()
         if column_name not in existing_columns
     ]
     if not missing_columns:

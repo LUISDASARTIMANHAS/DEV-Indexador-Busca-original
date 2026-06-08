@@ -38,6 +38,9 @@ bcrypt==4.0.1
 pdfplumber==0.11.9
 python-docx==1.2.0
 unidecode==1.4.0
+pytesseract==0.3.13
+pdf2image==1.17.0
+Pillow==12.2.0
 
 ###########################################################
 # 🔹 TESTING
@@ -72,8 +75,7 @@ passlib[bcrypt]==1.7.4
 # 🔹 OPTIONAL – OCR (PDF escaneado)
 ###########################################################
 
-# pytesseract==0.3.10
-# pillow==10.3.0
+# Dependencias de sistema no Docker: tesseract-ocr, tesseract-ocr-por, poppler-utils
 
 ###########################################################
 # 🔹 OPTIONAL – TELEGRAM BOT

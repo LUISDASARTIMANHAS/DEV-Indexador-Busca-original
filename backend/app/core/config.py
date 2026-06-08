@@ -55,6 +55,13 @@ class Settings(BaseSettings):
     BOT_PUBLIC_MODE: bool = True
     BOT_RATE_LIMIT_PER_MINUTE: int = 20
 
+    OCR_ENABLED: bool = True
+    OCR_LANGUAGE: str = "por"
+    OCR_DPI: int = 200
+    OCR_MAX_PAGES: int = 20
+    OCR_MIN_TEXT_LENGTH: int = 50
+    OCR_TIMEOUT_SECONDS: int = 120
+
     BACKEND_CORS_ORIGINS: list[str] = [
         "http://localhost:8080",
         "http://127.0.0.1:8080",

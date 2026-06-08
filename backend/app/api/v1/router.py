@@ -12,6 +12,7 @@ from app.api.v1.metrics_routes import router as metrics_router
 from app.api.v1.settings_routes import router as settings_router
 from app.api.v1.notification_routes import router as notification_router
 from app.api.v1.feedback_routes import router as feedback_router
+from app.api.v1.ocr_routes import router as ocr_router
 
 
 api_router = APIRouter()
@@ -29,3 +30,4 @@ api_router.include_router(metrics_router)
 api_router.include_router(settings_router)
 api_router.include_router(notification_router)
 api_router.include_router(feedback_router)
+api_router.include_router(ocr_router)

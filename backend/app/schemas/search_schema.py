@@ -27,6 +27,8 @@ class SearchResultResponse(BaseModel):
     searchMode: str | None = None
     matchedTerms: list[str] | None = None
     scoreExplanation: str | None = None
+    ocrExecuted: bool | None = None
+    textSource: str | None = None
     textual_score: float | None = None
     semantic_score: float | None = None
     final_score: float | None = None

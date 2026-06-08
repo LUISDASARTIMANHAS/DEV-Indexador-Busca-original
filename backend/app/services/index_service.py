@@ -426,6 +426,10 @@ class IndexService:
                 "totalPostings": metrics["total_postings"],
                 "averageTermsPerDocument": metrics["average_terms_per_document"],
                 "lastIndexedAt": metrics["last_indexed_at"],
+                "ocrDocuments": metrics["ocr_documents"],
+                "ocrSuccess": metrics["ocr_success"],
+                "ocrFailed": metrics["ocr_failed"],
+                "averageOcrTimeMs": metrics["average_ocr_time_ms"],
             },
             "logs": logs,
         }
@@ -564,6 +568,41 @@ class IndexService:
         average_terms_per_document = (
             f"{(total_postings / active_documents):.1f}" if active_documents else "0.0"
         )
+        ocr_documents = (
+            db.query(func.count(DocumentHistory.cod_historico_documento))
+            .join(Document, Document.cod_documento == DocumentHistory.cod_documento)
+            .filter(Document.ativo.is_(True))
+            .filter(DocumentHistory.versao_ativa.is_(True))
+            .filter(DocumentHistory.ocr_executado.is_(True))
+            .scalar()
+            or 0
+        )
+        ocr_success = (
+            db.query(func.count(DocumentHistory.cod_historico_documento))
+            .join(Document, Document.cod_documento == DocumentHistory.cod_documento)
+            .filter(Document.ativo.is_(True))
+            .filter(DocumentHistory.versao_ativa.is_(True))
+            .filter(DocumentHistory.ocr_status == "success")
+            .scalar()
+            or 0
+        )
+        ocr_failed = (
+            db.query(func.count(DocumentHistory.cod_historico_documento))
+            .join(Document, Document.cod_documento == DocumentHistory.cod_documento)
+            .filter(Document.ativo.is_(True))
+            .filter(DocumentHistory.versao_ativa.is_(True))
+            .filter(DocumentHistory.ocr_status == "failed")
+            .scalar()
+            or 0
+        )
+        average_ocr_time_ms = (
+            db.query(func.avg(DocumentHistory.ocr_tempo_ms))
+            .join(Document, Document.cod_documento == DocumentHistory.cod_documento)
+            .filter(Document.ativo.is_(True))
+            .filter(DocumentHistory.versao_ativa.is_(True))
+            .filter(DocumentHistory.ocr_status == "success")
+            .scalar()
+        )
 
         return {
             "active_documents": active_documents,
@@ -572,6 +611,10 @@ class IndexService:
             "total_postings": total_postings,
             "average_terms_per_document": average_terms_per_document,
             "last_indexed_at": last_indexed_at.isoformat() if last_indexed_at else None,
+            "ocr_documents": ocr_documents,
+            "ocr_success": ocr_success,
+            "ocr_failed": ocr_failed,
+            "average_ocr_time_ms": int(average_ocr_time_ms or 0),
         }
 
 

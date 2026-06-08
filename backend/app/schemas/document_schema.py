@@ -21,6 +21,8 @@ class DocumentUploadResponse(BaseModel):
     hash: str
     extracted: bool
     extractedCharacters: int
+    ocrExecuted: bool = False
+    ocrStatus: str | None = None
 
 
 class DocumentDetailsResponse(BaseModel):
@@ -46,6 +48,14 @@ class DocumentDetailsResponse(BaseModel):
     content: str
     formattedContent: str | None = None
     extractedCharacters: int
+    ocrExecuted: bool = False
+    ocrStatus: str | None = None
+    ocrLanguage: str | None = None
+    ocrPagesProcessed: int | None = None
+    ocrProcessingTimeMs: int | None = None
+    ocrError: str | None = None
+    ocrExecutedAt: str | None = None
+    textSource: str | None = None
 
 
 class DocumentMetadataResponse(BaseModel):

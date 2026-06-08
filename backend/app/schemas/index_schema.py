@@ -27,6 +27,10 @@ class IndexMetricsResponse(BaseModel):
     totalPostings: int
     averageTermsPerDocument: str
     lastIndexedAt: str | None = None
+    ocrDocuments: int = 0
+    ocrSuccess: int = 0
+    ocrFailed: int = 0
+    averageOcrTimeMs: int = 0
 
 
 class IndexStatusResponse(BaseModel):

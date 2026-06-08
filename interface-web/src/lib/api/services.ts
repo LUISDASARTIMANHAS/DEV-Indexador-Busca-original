@@ -39,6 +39,8 @@ import type {
   MetricsReport,
   MetricsReportFilters,
   MetricsSnapshot,
+  OcrRunResponse,
+  OcrStatusResponse,
   ReindexResult,
   RelevanceFeedback,
   RelevanceFeedbackPayload,
@@ -425,6 +427,88 @@ export const documentService = {
   },
 };
 
+export const ocrService = {
+  async runOcr(
+    documentId: number,
+    options: { versionId?: number; force?: boolean } = {},
+  ): Promise<OcrRunResponse> {
+    if (shouldUseMocks()) {
+      await delay(900);
+      return {
+        document_id: documentId,
+        version_id: options.versionId,
+        ocr_executed: true,
+        success: true,
+        pages_processed: 4,
+        text_length: 5320,
+        processing_time_ms: 4210,
+        message: "OCR executado e texto extraído atualizado com sucesso.",
+      };
+    }
+
+    return apiRequest<OcrRunResponse>(`/api/v1/ocr/document/${documentId}`, {
+      method: "POST",
+      query: {
+        version_id: options.versionId,
+        force: options.force,
+      },
+    });
+  },
+
+  async getStatus(documentId: number): Promise<OcrStatusResponse> {
+    if (shouldUseMocks()) {
+      await delay(150);
+      const document = mockDocuments.find((item) => item.id === documentId);
+      return {
+        document_id: documentId,
+        versions: [
+          {
+            version_id: document?.version ?? 1,
+            history_id: document?.version ?? 1,
+            active: true,
+            ocr_executed: Boolean(document?.ocrExecuted),
+            ocr_status: document?.ocrStatus ?? "skipped",
+            ocr_language: document?.ocrLanguage ?? "por",
+            pages_processed: document?.ocrPagesProcessed ?? 0,
+            processing_time_ms: document?.ocrProcessingTimeMs ?? 0,
+            error: document?.ocrError ?? null,
+            executed_at: document?.ocrExecutedAt ?? null,
+            text_length: document?.extractedCharacters ?? 0,
+          },
+        ],
+      };
+    }
+
+    return apiRequest<OcrStatusResponse>(`/api/v1/ocr/document/${documentId}/status`);
+  },
+
+  async reprocessPending(limit = 10): Promise<{ processed: number; successCount: number; failureCount: number; items: OcrRunResponse[] }> {
+    if (shouldUseMocks()) {
+      await delay(1000);
+      return {
+        processed: 1,
+        successCount: 1,
+        failureCount: 0,
+        items: [
+          {
+            document_id: Date.now(),
+            ocr_executed: true,
+            success: true,
+            pages_processed: 3,
+            text_length: 4200,
+            processing_time_ms: 3600,
+          },
+        ],
+      };
+    }
+
+    return apiRequest<{ processed: number; successCount: number; failureCount: number; items: OcrRunResponse[] }>("/api/v1/ocr/reprocess-pending", {
+      method: "POST",
+      query: { limit },
+    });
+  },
+};
+
 export const userService = {
   async list(): Promise<UserSummary[]> {
     if (shouldUseMocks()) {
@@ -511,6 +595,8 @@ export const ingestionService = {
         hash: "mock-hash",
         extracted: true,
         extractedCharacters: 1200,
+        ocrExecuted: false,
+        ocrStatus: "skipped",
       };
     }
 
@@ -564,7 +650,7 @@ export const ingestionService = {
         items: payload.files.map((file, index) => ({
           fileName: file.name,
           status: "indexed",
-          message: "Documento validado, extraído e armazenado com sucesso.",
+          message: "Documento validado, extraído, OCR avaliado e armazenado com sucesso.",
           documentId: Date.now() + index,
           extractedCharacters: 1200,
           sizeLabel: `${(file.size / 1024 / 1024).toFixed(1)} MB`,

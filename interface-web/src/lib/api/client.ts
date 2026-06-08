@@ -8,7 +8,7 @@ type RequestOptions = {
   body?: unknown;
   headers?: Record<string, string>;
   token?: string;
-  query?: Record<string, string | number | string[] | undefined>;
+  query?: Record<string, string | number | boolean | string[] | undefined>;
 };
 
 export const authSessionExpiredEvent = "ifesdoc:session-expired";

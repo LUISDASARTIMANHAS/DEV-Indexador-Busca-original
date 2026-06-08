@@ -54,6 +54,8 @@ export type SearchResult = {
   searchMode?: SearchMode | string;
   matchedTerms?: string[];
   scoreExplanation?: string;
+  ocrExecuted?: boolean;
+  textSource?: "native" | "ocr" | string;
   metadata?: Record<string, unknown>;
 };
 
@@ -180,6 +182,45 @@ export type DocumentDetails = {
   content: string;
   formattedContent?: string;
   extractedCharacters: number;
+  ocrExecuted?: boolean;
+  ocrStatus?: "pending" | "success" | "failed" | "skipped" | string | null;
+  ocrLanguage?: string | null;
+  ocrPagesProcessed?: number | null;
+  ocrProcessingTimeMs?: number | null;
+  ocrError?: string | null;
+  ocrExecutedAt?: string | null;
+  textSource?: "native" | "ocr" | string | null;
+};
+
+export type OcrStatus = {
+  version_id: number | string;
+  history_id?: number | string;
+  active?: boolean;
+  ocr_executed: boolean;
+  ocr_status?: "pending" | "success" | "failed" | "skipped" | string | null;
+  ocr_language?: string | null;
+  pages_processed?: number | null;
+  processing_time_ms?: number | null;
+  error?: string | null;
+  executed_at?: string | null;
+  text_length?: number;
+};
+
+export type OcrStatusResponse = {
+  document_id: number | string;
+  versions: OcrStatus[];
+};
+
+export type OcrRunResponse = {
+  document_id: number | string;
+  version_id?: number | string;
+  ocr_executed: boolean;
+  success: boolean;
+  pages_processed?: number;
+  text_length?: number;
+  processing_time_ms?: number;
+  message?: string | null;
+  error?: string | null;
 };
 
 export type DocumentVersion = {
@@ -241,6 +282,8 @@ export type UploadedDocument = {
   hash: string;
   extracted: boolean;
   extractedCharacters: number;
+  ocrExecuted?: boolean;
+  ocrStatus?: string | null;
 };
 
 export type BatchUploadItem = {
@@ -292,6 +335,10 @@ export type IndexStatusSnapshot = {
     totalPostings: number;
     averageTermsPerDocument: string;
     lastIndexedAt?: string | null;
+    ocrDocuments: number;
+    ocrSuccess: number;
+    ocrFailed: number;
+    averageOcrTimeMs: number;
   };
   logs: IndexLogEntry[];
 };

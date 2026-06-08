@@ -16,13 +16,14 @@ import {
   FileJson,
   History,
   RotateCcw,
+  ScanText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { documentService } from "@/lib/api/services";
+import { documentService, ocrService } from "@/lib/api/services";
 import { PageError, PageLoader } from "@/components/PageState";
 import { useDocument, useDocumentVersions } from "@/hooks/use-app-query";
 
@@ -60,6 +61,7 @@ const DocumentViewPage = () => {
   const queryClient = useQueryClient();
   const [reindexing, setReindexing] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [ocrRunning, setOcrRunning] = useState(false);
   const [exporting, setExporting] = useState<string | null>(null);
   const documentId = Number(id);
   const versionParam = Number(searchParams.get("version"));
@@ -167,6 +169,36 @@ const DocumentViewPage = () => {
     }
   };
 
+  const handleRunOcr = async (force = false) => {
+    setOcrRunning(true);
+    try {
+      const result = await ocrService.runOcr(documentId, {
+        versionId: selectedVersion,
+        force,
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["document", documentId] }),
+        queryClient.invalidateQueries({ queryKey: ["index-status"] }),
+        queryClient.invalidateQueries({ queryKey: ["search-results"] }),
+        refetch(),
+      ]);
+      toast({
+        title: result.success ? "OCR processado" : "OCR falhou",
+        description: result.message || (result.success ? "Texto extraído atualizado." : result.error || "Falha ao executar OCR."),
+        variant: result.success ? "default" : "destructive",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Não foi possível executar OCR.";
+      toast({
+        title: "Falha no OCR",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setOcrRunning(false);
+    }
+  };
+
   const selectVersion = (value: string) => {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("version", value);
@@ -190,6 +222,15 @@ const DocumentViewPage = () => {
 
   const displayTitle = document.displayTitle || document.title;
   const readingContent = document.formattedContent || document.content;
+  const ocrStatusLabel = {
+    success: "Executado com sucesso",
+    failed: "Falhou",
+    skipped: "Ignorado",
+    pending: "Pendente",
+  }[document.ocrStatus || "pending"] || document.ocrStatus || "Pendente";
+  const ocrTime = document.ocrProcessingTimeMs
+    ? `${(document.ocrProcessingTimeMs / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}s`
+    : "0s";
   const readingBlocks = readingContent
     .split(/\n{2,}/)
     .map((block) => block.trim())
@@ -387,6 +428,70 @@ const DocumentViewPage = () => {
               <div className="space-y-1 text-sm text-foreground">
                 <p className="break-all">{document.hash}</p>
               </div>
+            </div>
+
+            <div className="rounded-xl border border-border/70 bg-background/70 p-4 md:col-span-2 xl:col-span-3">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                  <ScanText className="h-3.5 w-3.5" />
+                  OCR / Texto extraído
+                </div>
+                <Badge variant={document.ocrStatus === "failed" ? "destructive" : document.ocrExecuted ? "default" : "secondary"}>
+                  {ocrStatusLabel}
+                </Badge>
+              </div>
+              <div className="grid gap-3 text-sm text-foreground sm:grid-cols-4">
+                <div>
+                  <p className="text-xs text-muted-foreground">Origem</p>
+                  <p>{document.textSource === "ocr" ? "Texto extraído via OCR" : "Extração textual comum"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Idioma</p>
+                  <p>{document.ocrLanguage || "por"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Páginas OCR</p>
+                  <p>{document.ocrPagesProcessed ?? 0}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Tempo</p>
+                  <p>{ocrTime}</p>
+                </div>
+              </div>
+              {document.ocrError && (
+                <p className="mt-3 rounded-md border border-destructive/30 bg-destructive/10 p-2 text-sm text-destructive">
+                  {document.ocrError}
+                </p>
+              )}
+              {document.extractedCharacters < 50 && (
+                <p className="mt-3 text-sm text-muted-foreground">
+                  O texto extraído está curto; OCR pode tornar este PDF pesquisável no PostgreSQL FTS.
+                </p>
+              )}
+              {isAdmin && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => handleRunOcr(false)}
+                    disabled={ocrRunning}
+                  >
+                    <ScanText className={`h-3.5 w-3.5 ${ocrRunning ? "animate-pulse" : ""}`} />
+                    {ocrRunning ? "Executando..." : "Executar OCR"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => handleRunOcr(true)}
+                    disabled={ocrRunning}
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${ocrRunning ? "animate-spin" : ""}`} />
+                    Forçar OCR novamente
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -261,7 +261,11 @@ export const mockSearch = (
         category: result.category,
         author: result.author,
         date: result.date,
+        text_source: result.id === 3 ? "ocr" : "native",
+        ocr_executed: result.id === 3,
       },
+      ocrExecuted: result.id === 3,
+      textSource: result.id === 3 ? "ocr" : "native",
     };
   });
 
@@ -376,6 +380,14 @@ export const mockDocuments: DocumentDetails[] = [
     hash: "mock-sha256",
     downloadUrl: "#",
     extractedCharacters: 2340,
+    ocrExecuted: false,
+    ocrStatus: "skipped",
+    ocrLanguage: "por",
+    ocrPagesProcessed: 0,
+    ocrProcessingTimeMs: 0,
+    ocrError: null,
+    ocrExecutedAt: null,
+    textSource: "native",
     content: `Art. 1º Esta Resolução estabelece as normas gerais para o funcionamento dos cursos de graduação do Instituto Federal do Espírito Santo - IFES.
 
 Art. 2º A organização didático-pedagógica dos cursos de graduação observará os seguintes princípios:
@@ -411,7 +423,7 @@ export const mockBatchFiles: IngestionBatchFile[] = [
 ];
 
 export const mockIngestionHistory: IngestionHistoryEntry[] = [
-  { date: "2025-08-12 14:32", file: "resolucao_45_2025.pdf", type: "Individual", result: "Sucesso", details: "Validado → Extraído → Indexado" },
+  { date: "2025-08-12 14:32", file: "resolucao_45_2025.pdf", type: "Individual", result: "Sucesso", details: "Validado → Extraído → OCR ignorado → Indexado" },
   { date: "2025-08-12 14:30", file: "edital_monitoria.pdf", type: "Individual", result: "Sucesso", details: "Validado → Extraído → Indexado" },
   { date: "2025-08-11 16:42", file: "planilha_notas.csv", type: "Lote", result: "Falha", details: "Validação falhou: formato incompatível" },
   { date: "2025-08-11 16:40", file: "ata_reuniao.txt", type: "Lote", result: "Sucesso", details: "Validado → Extraído → Indexado" },
@@ -429,6 +441,26 @@ export const mockIndexStatus: IndexStatusSnapshot = {
     completed: 2,
     processing: 0,
     failed: 1,
+  },
+  integrityOk: true,
+  inconsistencyCount: 0,
+  consistency: {
+    documentsWithoutActiveVersion: 0,
+    documentsWithoutIndex: 0,
+    orphanIndexEntries: 0,
+    staleTerms: 0,
+  },
+  metrics: {
+    activeDocuments: 1247,
+    activeVersions: 1247,
+    totalTerms: 84230,
+    totalPostings: 384900,
+    averageTermsPerDocument: "308.7",
+    lastIndexedAt: "2026-05-18T14:32:17",
+    ocrDocuments: 86,
+    ocrSuccess: 82,
+    ocrFailed: 4,
+    averageOcrTimeMs: 4200,
   },
   logs: [
     { time: "14:32:01", message: "Iniciando indexação de 3 documentos...", type: "info" },

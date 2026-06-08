@@ -24,6 +24,7 @@ from app.domain.index_history import IndexHistory
 from app.domain.ingestion_history import IngestionHistory
 from app.domain.ingestion_status import IngestionStatus
 from app.domain.invalid_document import InvalidDocument
+from app.domain.ocr_history import OCRHistory
 from app.domain.user import User
 from app.exceptions.document_exceptions import (
     DocumentNotFoundException,
@@ -32,6 +33,7 @@ from app.exceptions.document_exceptions import (
 from app.repositories.document_repository import DocumentRepository
 from app.services.administrative_history_service import administrative_history_service
 from app.services.index_service import index_service
+from app.services.ocr_service import ocr_service
 
 
 class DocumentService:
@@ -112,6 +114,14 @@ class DocumentService:
             fallback=adapter.mime_type,
             max_length=255,
         )
+        ocr_result = ocr_service.run_ocr_for_file_if_needed(
+            str(storage_path),
+            extracted_content,
+            mime_type=mime_type,
+            extension=extension,
+        )
+        if ocr_result.get("ocr_executed") and ocr_result.get("success") and ocr_result.get("text"):
+            extracted_content = ocr_result["text"][:200000]
         file_hash = hashlib.sha256(content).hexdigest()
         category_row = self._get_or_create_category(db, normalized_category)
         processing_status = self._get_or_create_status(db, "processando")
@@ -150,10 +160,19 @@ class DocumentService:
             hash_arquivo=file_hash,
             texto_extraido=extracted_content,
             texto_processado=extracted_content,
+            ocr_executado=bool(ocr_result.get("ocr_executed")),
+            ocr_status=self._ocr_status_from_result(ocr_result),
+            ocr_idioma=ocr_result.get("language"),
+            ocr_paginas_processadas=int(ocr_result.get("pages_processed") or 0),
+            ocr_tempo_ms=int(ocr_result.get("processing_time_ms") or 0),
+            ocr_erro=ocr_result.get("error"),
+            ocr_executado_em=datetime.utcnow() if ocr_result.get("ocr_executed") else None,
             versao_ativa=True,
         )
         db.add(history_document)
         db.flush()
+        if ocr_result.get("ocr_executed"):
+            self._record_ocr_history(db, history_document, ocr_result)
 
         ingestion_history = IngestionHistory(
             cod_usuario=uploaded_by.cod_usuario,
@@ -308,6 +327,14 @@ class DocumentService:
             fallback=adapter.mime_type,
             max_length=255,
         )
+        ocr_result = ocr_service.run_ocr_for_file_if_needed(
+            str(storage_path),
+            extracted_content,
+            mime_type=metadata.mime_type,
+            extension=extension,
+        )
+        if ocr_result.get("ocr_executed") and ocr_result.get("success") and ocr_result.get("text"):
+            extracted_content = ocr_result["text"][:200000]
         metadata.tamanho_bytes = len(content)
         metadata.hash_arquivo = file_hash
 
@@ -327,10 +354,19 @@ class DocumentService:
             hash_arquivo=metadata.hash_arquivo,
             texto_extraido=extracted_content,
             texto_processado=extracted_content,
+            ocr_executado=bool(ocr_result.get("ocr_executed")),
+            ocr_status=self._ocr_status_from_result(ocr_result),
+            ocr_idioma=ocr_result.get("language"),
+            ocr_paginas_processadas=int(ocr_result.get("pages_processed") or 0),
+            ocr_tempo_ms=int(ocr_result.get("processing_time_ms") or 0),
+            ocr_erro=ocr_result.get("error"),
+            ocr_executado_em=datetime.utcnow() if ocr_result.get("ocr_executed") else None,
             versao_ativa=True,
         )
         db.add(new_history)
         db.flush()
+        if ocr_result.get("ocr_executed"):
+            self._record_ocr_history(db, new_history, ocr_result)
 
         index_service.reindex_document(
             db,
@@ -398,6 +434,9 @@ class DocumentService:
         index_service.remove_document_from_index(db, document_id=document_id)
 
         if history_ids:
+            db.query(OCRHistory).filter(
+                OCRHistory.cod_historico_documento.in_(history_ids)
+            ).delete(synchronize_session=False)
             db.query(IndexHistory).filter(
                 IndexHistory.cod_historico_documento.in_(history_ids)
             ).delete(synchronize_session=False)
@@ -559,7 +598,11 @@ class DocumentService:
                     {
                         "fileName": document_payload["file_name"],
                         "status": "indexed",
-                        "message": "Documento validado, extraído e armazenado com sucesso.",
+                        "message": (
+                            "Documento validado, extraído via OCR e armazenado com sucesso."
+                            if document_payload.get("ocr_executado")
+                            else "Documento validado, extraído e armazenado com sucesso."
+                        ),
                         "documentId": document_payload["id"],
                         "extractedCharacters": len(document_payload["content"] or ""),
                         "sizeLabel": self._format_size(document_payload["size_bytes"]),
@@ -772,6 +815,8 @@ class DocumentService:
             "hash": payload["file_hash"],
             "extracted": True,
             "extractedCharacters": extracted_characters,
+            "ocrExecuted": bool(payload.get("ocr_executado")),
+            "ocrStatus": payload.get("ocr_status") or "pending",
         }
 
     def to_history_response(self, payload: dict) -> dict:
@@ -781,6 +826,8 @@ class DocumentService:
             f"Validado ({payload['type']}) • Extraído {extracted_characters} caracteres • "
             f"Status {payload['ingestion_status']}"
         )
+        if payload.get("ocr_executado"):
+            details += f" • OCR {payload.get('ocr_status') or 'executado'}"
         return {
             "date": created_at.strftime("%Y-%m-%d %H:%M") if created_at else "",
             "file": payload["file_name"],
@@ -843,6 +890,16 @@ class DocumentService:
             "content": preview_content,
             "formattedContent": readable_content,
             "extractedCharacters": extracted_characters,
+            "ocrExecuted": bool(payload.get("ocr_executado")),
+            "ocrStatus": payload.get("ocr_status") or "pending",
+            "ocrLanguage": payload.get("ocr_idioma"),
+            "ocrPagesProcessed": payload.get("ocr_paginas_processadas"),
+            "ocrProcessingTimeMs": payload.get("ocr_tempo_ms"),
+            "ocrError": payload.get("ocr_erro"),
+            "ocrExecutedAt": payload.get("ocr_executado_em").isoformat()
+            if payload.get("ocr_executado_em")
+            else None,
+            "textSource": "ocr" if payload.get("ocr_executado") and payload.get("ocr_status") == "success" else "native",
         }
 
     def to_metadata_response(self, payload: dict) -> dict:
@@ -960,6 +1017,32 @@ class DocumentService:
             history.tamanho_bytes = size_bytes
         if not history.hash_arquivo:
             history.hash_arquivo = file_hash
+
+    @staticmethod
+    def _ocr_status_from_result(result: dict) -> str:
+        if result.get("ocr_executed"):
+            return "success" if result.get("success") and result.get("text") else "failed"
+        return "skipped"
+
+    def _record_ocr_history(
+        self,
+        db: Session,
+        history: DocumentHistory,
+        result: dict,
+    ) -> None:
+        db.add(
+            OCRHistory(
+                cod_documento=history.cod_documento,
+                cod_historico_documento=history.cod_historico_documento,
+                status=self._ocr_status_from_result(result),
+                idioma=result.get("language"),
+                paginas_processadas=int(result.get("pages_processed") or 0),
+                tamanho_texto=len(history.texto_extraido or ""),
+                tempo_ms=int(result.get("processing_time_ms") or 0),
+                erro=result.get("error"),
+                executado_em=history.ocr_executado_em or datetime.utcnow(),
+            )
+        )
 
     def _register_invalid_document(
         self, db: Session, uploaded_by: User, filename: str, reason: str

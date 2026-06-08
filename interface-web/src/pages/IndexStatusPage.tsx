@@ -184,6 +184,28 @@ const IndexStatusPage = () => {
         </p>
       </div>
 
+      <div className="glass-card p-5 mb-6">
+        <h3 className="text-sm font-semibold text-foreground mb-4">OCR em PDFs escaneados</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+          <div>
+            <p className="text-lg font-bold text-foreground">{data.metrics.ocrDocuments}</p>
+            <p className="text-xs text-muted-foreground">Docs com OCR</p>
+          </div>
+          <div>
+            <p className="text-lg font-bold text-success">{data.metrics.ocrSuccess}</p>
+            <p className="text-xs text-muted-foreground">OCRs com sucesso</p>
+          </div>
+          <div>
+            <p className="text-lg font-bold text-destructive">{data.metrics.ocrFailed}</p>
+            <p className="text-xs text-muted-foreground">OCRs com falha</p>
+          </div>
+          <div>
+            <p className="text-lg font-bold text-foreground">{(data.metrics.averageOcrTimeMs / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}s</p>
+            <p className="text-xs text-muted-foreground">Tempo médio OCR</p>
+          </div>
+        </div>
+      </div>
+
       {/* Log */}
       <div className="glass-card overflow-hidden">
         <div className="p-4 border-b border-border">

@@ -60,5 +60,7 @@ class PostgresFTSSearchStrategy:
             "mime_type": row["mime_type"],
             "size_bytes": row["size_bytes"],
             "content": row.get("content", ""),
+            "ocr_executado": bool(row.get("ocr_executado")),
+            "ocr_status": row.get("ocr_status"),
             "author_name": row["author_name"],
         }

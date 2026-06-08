@@ -30,6 +30,4 @@ class PdfDocumentAdapter(DocumentAdapter):
             raise DocumentValidationException("Falha ao extrair texto do PDF.") from exc
 
         extracted_text = "\n\n".join(page for page in pages if page).strip()
-        if not extracted_text:
-            raise DocumentValidationException("PDF válido, mas sem texto extraível.")
         return extracted_text[:200000]
