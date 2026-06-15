@@ -1,97 +1,188 @@
 # Prompt Para Criar Apresentacao De Slides Do IFESDOC
 
-Use o prompt abaixo em uma ferramenta de criacao de apresentacoes, IA generativa, Gamma, Canva, PowerPoint Copilot, Google Slides com IA ou ferramenta equivalente.
+Use este prompt em uma ferramenta de criacao de apresentacoes, como Gamma, Canva, PowerPoint Copilot, Google Slides com IA ou ferramenta equivalente.
 
 ```text
-Crie uma apresentacao de slides sobre o IFESDOC, um sistema de indexacao e busca de documentos institucionais.
+Crie uma apresentacao de slides para uma banca avaliadora sobre o IFESDOC, um sistema web de indexacao, busca e gestao de documentos institucionais.
 
-Objetivo:
-Explicar de forma clara, objetiva e visual o que e o IFESDOC, qual problema ele resolve, quais sao suas principais funcionalidades e como o sistema funciona tecnicamente.
+Contexto da apresentacao:
+- Tempo total: 10 minutos exatos.
+- Apresentadores: 3 pessoas.
+- Publico: banca mista, com pessoas da area de software e tambem pessoas leigas.
+- Linguagem: clara, institucional, objetiva e didatica.
+- O slide deve ter pouco texto. Os detalhes devem ficar nas notas do apresentador.
 
-Publico-alvo:
-Professores, avaliadores, alunos e equipe tecnica.
+Divisao obrigatoria:
+1. Primeiro tempo - 2min30s:
+   Contextualizar a teoria por tras de ingestao, indexacao e busca documental.
+   Explicar de forma sucinta:
+   - problema de documentos institucionais dispersos;
+   - ingestao de documentos;
+   - extracao de texto e metadados;
+   - normalizacao, tokenizacao e indice;
+   - consulta do usuario, ranking, snippets e visualizacao.
 
-Tom:
-Institucional, moderno, didatico e direto.
+2. Segundo tempo - 5min00s:
+   Ocupar a maior parte da apresentacao.
+   Explicar o arcabouco tecnologico, tecnicas e caracteristicas unicas do IFESDOC.
+   Incluir:
+   - Backend FastAPI;
+   - Frontend React + TypeScript + Vite;
+   - PostgreSQL;
+   - SQLAlchemy;
+   - Docker Compose;
+   - autenticacao JWT;
+   - arquitetura em camadas: API, Services, Repositories, Domain, Strategies, Pipeline e Schemas;
+   - QueryAnalyzer;
+   - indice invertido;
+   - TF-IDF;
+   - BM25;
+   - PostgreSQL Full-Text Search com tsvector, indice GIN, ts_rank_cd e ts_headline;
+   - busca hibrida;
+   - snippets e highlight;
+   - versionamento de documentos com historico_documento;
+   - OCR com Tesseract para PDFs escaneados;
+   - metricas, historico, auditoria e feedback de relevancia;
+   - bot conversacional como interface adicional.
 
-Identidade visual:
-Use uma estetica limpa, com cores associadas a tecnologia, documentos, educacao e organizacao institucional. Use icones de documento, lupa, banco de dados, usuario, grafico, seguranca e servidor.
+3. Terceiro tempo - 2min30s:
+   Demonstrar o sistema funcionando.
+   Incluir uma sequencia visual:
+   - login;
+   - tela principal/menu;
+   - ingestao de documento;
+   - status de indexacao;
+   - busca;
+   - resultados com relevancia, snippet e highlight;
+   - abertura de documento;
+   - selecao de versao;
+   - painel de OCR;
+   - metricas ou comparador de estrategias.
 
-Estrutura da apresentacao:
+Quantidade de slides:
+Crie 8 slides, organizados assim:
 
-Slide 1 - Capa
-Titulo: IFESDOC
-Subtitulo: Sistema de Indexacao e Busca de Documentos
-Inclua espaco para equipe, disciplina e data.
+Slide 1 - IFESDOC: objetivo do sistema
+Conteudo:
+- Sistema de indexacao e busca documental
+- Centraliza, processa e recupera documentos
+- Foco em rastreabilidade e eficiencia
+Visual:
+- Capa limpa com icones de documento, lupa e banco de dados
+Notas:
+- Explicar em 30 segundos o que e o IFESDOC.
 
-Slide 2 - Problema
-Explique que instituicoes lidam com muitos documentos, versoes, formatos e metadados dispersos.
-Mostre a dificuldade de localizar rapidamente documentos relevantes.
+Slide 2 - Problema e fundamento teorico
+Conteudo:
+- Muitos documentos, formatos e versoes
+- Busca por nome de arquivo e limitada
+- Recuperacao de informacao usa analise, indice e ranking
+Visual:
+- Comparacao simples: arquivos dispersos vs busca organizada
+Notas:
+- Explicar para leigos que o sistema busca pelo conteudo, nao apenas pelo nome.
 
-Slide 3 - Solucao Proposta
-Apresente o IFESDOC como uma plataforma para ingestao, indexacao, busca, visualizacao, versionamento e monitoramento de documentos.
+Slide 3 - Pipeline: ingestao, indexacao e busca
+Conteudo:
+- Upload e validacao
+- Extracao de texto/metadados
+- Normalizacao, tokenizacao e indice
+- Ranking, snippets e interface
+Visual:
+- Diagrama horizontal:
+  Upload -> Extracao -> Processamento -> Indice -> Busca -> Resultados
+Notas:
+- Mostrar a teoria do processo de busca documental.
 
-Slide 4 - Visao Geral Do Fluxo
-Mostre o fluxo:
-Upload do documento -> Validacao -> Extracao de texto -> Processamento textual -> Indexacao -> Busca -> Visualizacao dos resultados.
+Slide 4 - Arquitetura do IFESDOC
+Conteudo:
+- Frontend React + TypeScript
+- Backend FastAPI + SQLAlchemy
+- PostgreSQL + Docker Compose
+- Camadas separadas
+Visual:
+- Diagrama em camadas: UI/API/Services/Repositories/Domain/Banco
+Notas:
+- Destacar manutencao, testes e separacao de responsabilidades.
 
-Slide 5 - Perfis De Usuario
-Explique os dois principais perfis:
-Usuario comum: realiza buscas, visualiza documentos e avalia resultados.
-Administrador: gerencia ingestao, usuarios, indexacao, auditoria, configuracoes e metricas.
+Slide 5 - Motor de busca e diferenciais tecnicos
+Conteudo:
+- QueryAnalyzer
+- Indice invertido, TF-IDF e BM25
+- PostgreSQL FTS com GIN
+- Busca hibrida
+- OCR para PDFs escaneados
+Visual:
+- Diagrama de sinais de relevancia combinados
+Notas:
+- Explicar termos tecnicos em linguagem simples.
+- FTS: busca textual nativa do banco.
+- OCR: transforma imagem em texto pesquisavel.
 
-Slide 6 - Ingestao De Documentos
-Explique upload individual, upload em lote, validacao de formato, extracao de conteudo, metadados e registro no banco.
+Slide 6 - Funcionalidades do produto
+Conteudo:
+- Ingestao individual e em lote
+- Busca com filtros, snippets e highlight
+- Versionamento de documentos
+- Metricas, auditoria e feedback
+- Bot conversacional
+Visual:
+- Grade com 5 blocos funcionais e icones
+Notas:
+- Mostrar valor para usuario comum e administrador.
 
-Slide 7 - Pipeline De Indexacao
-Mostre como o texto passa por normalizacao, remocao de stopwords, tokenizacao, geracao de termos e atualizacao do indice invertido.
+Slide 7 - Demonstracao do sistema
+Conteudo:
+- Login
+- Upload/indexacao
+- Busca e resultados
+- Documento, versoes e OCR
+- Metricas/comparador
+Visual:
+- Sequencia numerada com miniaturas ou icones
+Notas:
+- Este slide deve servir como roteiro da demo.
+- Se possivel, usar capturas reais do sistema.
 
-Slide 8 - Busca De Documentos
-Explique busca por termos, filtros por categoria, tipo, autor e data, alem da ordenacao por relevancia, data ou titulo.
+Slide 8 - Fechamento
+Conteudo:
+- Busca documental mais eficiente
+- Documentos rastreaveis e versionados
+- Motor de busca robusto
+- Sistema preparado para evolucao
+Visual:
+- Resumo em 4 cards
+Notas:
+- Fechar em 15 segundos e abrir para perguntas.
 
-Slide 9 - Apresentacao Avancada Dos Resultados
-Explique destaque dos termos buscados, trechos relevantes, barra de relevancia, previa rapida, abertura do documento e exportacao CSV/PDF.
+Requisitos visuais:
+- Visual limpo, institucional e moderno.
+- Usar cores associadas a tecnologia, educacao, confiabilidade e documentos.
+- Evitar slides carregados de texto.
+- Usar icones de documento, lupa, banco de dados, engrenagem, seguranca, grafico e servidor.
+- Usar diagramas simples para os fluxos.
+- Se houver capturas de tela do IFESDOC, priorizar capturas reais na parte da demonstracao.
 
-Slide 10 - Versionamento De Documentos
-Explique que documentos podem possuir varias versoes, o usuario pode escolher a versao na visualizacao, e o administrador pode registrar ou restaurar versoes.
+Notas do apresentador:
+Para cada slide, gere notas com fala sugerida. As notas devem seguir exatamente a divisao:
+- Pessoa 1: slides 1 a 3, 2min30s.
+- Pessoa 2: slides 4 a 6, 5min00s.
+- Pessoa 3: slides 7 e 8, 2min30s.
 
-Slide 11 - Metricas E Relatorios
-Explique coleta de consultas realizadas, tempo medio de resposta, buscas sem resultado, termos frequentes, documentos mais acessados e exportacao de relatorios.
+Tom das notas:
+- Linguagem natural, como fala oral.
+- Explicar beneficios antes de termos tecnicos.
+- Quando citar tecnologia, explicar rapidamente o papel dela.
+- Nao usar frases longas demais.
 
-Slide 12 - Auditoria E Seguranca
-Explique autenticacao, token JWT, perfis de acesso, restricao de rotas administrativas, registro de acoes e tentativas negadas.
-
-Slide 13 - Arquitetura Tecnica
-Mostre:
-Frontend React
-Backend FastAPI
-Banco PostgreSQL
-Docker Compose
-Worker de notificacoes
-Camadas: API, Services, Repositories, Domain, Strategies, Pipeline e Schemas.
-
-Slide 14 - Beneficios
-Liste: busca mais rapida, organizacao documental, rastreabilidade, controle de versoes, apoio a gestao e melhor experiencia do usuario.
-
-Slide 15 - Demonstracao Sugerida
-Mostre uma sequencia de demonstracao:
-Login -> Upload -> Busca -> Resultados -> Previa -> Versoes -> Avaliacao -> Relatorios.
-
-Slide 16 - Conclusao
-Reforce que o IFESDOC centraliza documentos, melhora a recuperacao da informacao e oferece base para evolucao futura, como busca semantica e inteligencia artificial.
-
-Para cada slide, gere:
-- Titulo curto
-- 3 a 5 bullets
-- Sugestao visual
-- Notas do apresentador
+Resultado esperado:
+Uma apresentacao objetiva, com 8 slides, adequada para 10 minutos, com equilibrio entre teoria, engenharia do sistema e demonstracao pratica.
 ```
 
-## Observacoes Para A Geracao
+## Observacoes De Uso
 
-- Priorize frases curtas e informativas.
-- Evite excesso de texto nos slides.
-- Use diagramas simples para os fluxos.
-- Use capturas de tela do sistema se estiverem disponiveis.
-- Reserve detalhes tecnicos para as notas do apresentador.
-- Mantenha a apresentacao objetiva, com foco no funcionamento real do IFESDOC.
+- Depois que a ferramenta gerar os slides, revise o excesso de texto.
+- A demo deve ser ensaiada com cronometro.
+- Se a apresentacao tiver capturas reais, use-as principalmente no slide 7.
+- Nao inclua detalhes de codigo nos slides; deixe isso para perguntas da banca.
+- Use o roteiro em [roteiro_apresentacao_ifesdoc.md](roteiro_apresentacao_ifesdoc.md) como base para as falas.

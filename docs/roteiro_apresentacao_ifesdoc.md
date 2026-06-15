@@ -1,271 +1,249 @@
 # Roteiro Da Apresentacao Do IFESDOC
 
-Este roteiro foi pensado para uma apresentacao objetiva, clara e completa sobre o IFESDOC. Ele pode ser usado junto com os slides gerados a partir do prompt em [prompt_apresentacao_ifesdoc.md](prompt_apresentacao_ifesdoc.md).
+Este roteiro foi ajustado para ficar coeso com o slide criado em `docs/apresentacao/Slide de apresentação - IFESDOC.pptx.pdf`.
 
-## Slide 1 - Capa
+Tempo total: 10 minutos exatos.
 
-Apresentar o IFESDOC como um sistema de indexacao e busca de documentos.
+Divisao entre apresentadores:
 
-Fala sugerida:
+- Pessoa 1: contexto, problema e teoria geral do processo - 2min30s.
+- Pessoa 2: tecnologias, arquitetura e diferenciais de engenharia/produto - 5min00s.
+- Pessoa 3: demonstracao, dificuldades, beneficios e fechamento - 2min30s.
 
-> Esta apresentacao mostra o IFESDOC, um sistema desenvolvido para indexacao e busca de documentos institucionais. A proposta e facilitar o armazenamento, a organizacao, a recuperacao e o acompanhamento de documentos dentro de uma instituicao.
+Orientacao de linguagem: explicar primeiro o beneficio pratico e depois o termo tecnico. A banca tem pessoas de software e pessoas leigas, entao os conceitos tecnicos devem ser citados, mas sempre acompanhados de uma traducao simples.
 
-Pontos principais:
+## Mapa Geral Do Tempo
 
-- Nome do sistema: IFESDOC.
-- Finalidade: indexacao e busca documental.
-- Contexto: organizacao e recuperacao de documentos institucionais.
+| Tempo | Pessoa | Slides | Tema |
+|---|---|---|---|
+| 0:00 - 0:30 | Pessoa 1 | Slide 1 | Abertura e objetivo |
+| 0:30 - 1:10 | Pessoa 1 | Slide 2 | Desafio da gestao documental |
+| 1:10 - 1:50 | Pessoa 1 | Slide 3 | O que e o IFESDOC |
+| 1:50 - 2:30 | Pessoa 1 | Slides 8, 9 e 10 como referencia conceitual | Teoria: ingestao, indexacao e busca |
+| 2:30 - 3:10 | Pessoa 2 | Slide 4 | Pilares estrategicos |
+| 3:10 - 4:00 | Pessoa 2 | Slide 5 | Tecnologias utilizadas |
+| 4:00 - 4:45 | Pessoa 2 | Slide 6 | Arquitetura do sistema |
+| 4:45 - 5:10 | Pessoa 2 | Slide 7 | Roadmap do projeto |
+| 5:10 - 6:05 | Pessoa 2 | Slide 8 | Motor de busca |
+| 6:05 - 6:45 | Pessoa 2 | Slide 9 | Fluxo de processamento |
+| 6:45 - 7:10 | Pessoa 2 | Slide 10 | Pipeline de indexacao |
+| 7:10 - 7:30 | Pessoa 2 | Slide 11 | Funcionalidades |
+| 7:30 - 9:15 | Pessoa 3 | Slide 12 + sistema ao vivo | Demonstracao |
+| 9:15 - 9:35 | Pessoa 3 | Slide 13 | Problemas de desenvolvimento |
+| 9:35 - 9:50 | Pessoa 3 | Slide 14 | Beneficios |
+| 9:50 - 10:00 | Pessoa 3 | Slides 15 e 16 | Fechamento e duvidas |
 
-## Slide 2 - Problema
+## Pessoa 1 - Contexto, Problema E Teoria
 
-Explicar o problema que motivou o desenvolvimento do sistema.
+Tempo total: 2min30s.
 
-Fala sugerida:
+### Slide 1 - IFESDOC
 
-> Em ambientes institucionais, e comum existir um grande volume de documentos em diferentes formatos, categorias e versoes. Sem uma ferramenta adequada, encontrar o documento correto pode ser demorado, principalmente quando o usuario nao sabe o nome exato do arquivo ou quando existem documentos semelhantes.
+Tempo: 0:00 a 0:30.
 
-Pontos principais:
+Fala:
 
-- Grande volume de documentos.
-- Dificuldade de localizacao.
-- Falta de padronizacao.
-- Existencia de diferentes versoes.
-- Necessidade de rastreabilidade.
+> Bom dia/boa tarde. Nos vamos apresentar o IFESDOC, um sistema de indexacao e busca de documentos institucionais. O objetivo do sistema e transformar documentos digitais em informacao facil de encontrar, com organizacao, seguranca e rastreabilidade.
 
-## Slide 3 - Solucao Proposta
+> A apresentacao sera dividida em tres partes. Primeiro, vamos contextualizar o problema e a teoria por tras da busca documental. Depois, vamos mostrar a arquitetura, as tecnologias e os diferenciais do sistema. Por ultimo, faremos uma demonstracao pratica.
 
-Apresentar o IFESDOC como resposta ao problema.
+### Slide 2 - O Desafio Da Gestao Documental
 
-Fala sugerida:
+Tempo: 0:30 a 1:10.
 
-> O IFESDOC resolve esse problema criando uma plataforma centralizada. O sistema permite cadastrar documentos, extrair o conteudo textual, indexar as informacoes e disponibilizar uma busca mais inteligente, organizada e rastreavel.
+Fala:
 
-Pontos principais:
+> O desafio apresentado aqui e comum em ambientes institucionais: existe um grande volume de documentos, em formatos variados, como PDF, DOC e planilhas. Quando esses arquivos nao seguem um padrao ou ficam espalhados, a busca se torna lenta e pouco confiavel.
 
-- Centralizacao dos documentos.
-- Indexacao do conteudo textual.
-- Busca com filtros e ranking.
-- Visualizacao rapida dos resultados.
-- Monitoramento do uso do sistema.
+> Isso gera ineficiencia operacional. Pessoas gastam tempo procurando documentos, podem usar versoes erradas e tambem existe risco de seguranca e auditoria, porque fica mais dificil saber quem acessou, alterou ou publicou determinada informacao.
 
-## Slide 4 - Visao Geral Do Fluxo
+### Slide 3 - O Que E O IFESDOC?
 
-Mostrar o caminho completo de um documento dentro do sistema.
+Tempo: 1:10 a 1:50.
 
-Fala sugerida:
+Fala:
 
-> O funcionamento comeca com a ingestao do documento. Depois, o sistema valida o arquivo, extrai texto e metadados, processa o conteudo, atualiza o indice de busca e torna o documento disponivel para consulta pelos usuarios.
+> O IFESDOC foi construido para responder a esse problema. Ele nao funciona apenas como um repositorio de arquivos. A proposta e ser um motor de organizacao e recuperacao de documentos: o sistema recebe arquivos, extrai o conteudo, organiza metadados, indexa informacoes e permite buscar pelo conteudo dos documentos.
 
-Fluxo:
+> Em outras palavras, o usuario nao precisa depender apenas do nome do arquivo. Ele pode procurar por termos, categorias, tipos, datas ou autores, e o sistema tenta retornar os documentos mais relevantes.
 
-1. Upload do documento.
-2. Validacao de formato, tamanho e categoria.
-3. Extracao de texto e metadados.
-4. Processamento textual.
-5. Indexacao.
-6. Busca e exibicao dos resultados.
+### Ponte Teorica - Ingestao, Indexacao E Busca
 
-## Slide 5 - Perfis De Usuario
+Tempo: 1:50 a 2:30.
 
-Explicar a separacao entre usuario comum e administrador.
+Observacao: este trecho prepara a banca para os slides tecnicos que aparecem mais adiante, principalmente "O Motor de Busca", "Fluxo de Processamento" e "Pipeline de Indexacao".
 
-Fala sugerida:
+Fala:
 
-> O sistema trabalha com controle de acesso. O usuario comum pode buscar, visualizar documentos, acessar previas e avaliar a relevancia dos resultados. O administrador possui permissoes adicionais, como enviar documentos, gerenciar usuarios, acompanhar metricas, consultar auditoria e controlar configuracoes.
+> Teoricamente, um sistema de busca documental segue tres grandes etapas. A primeira e a ingestao: o documento entra no sistema, passa por validacao e tem seu texto extraido. A segunda e a indexacao: o texto e normalizado, tokenizado e armazenado em estruturas que facilitam a busca. A terceira e a recuperacao: quando o usuario faz uma consulta, o sistema interpreta os termos, procura no indice, ranqueia os resultados e exibe trechos relevantes.
 
-Pontos principais:
+> Essa e a base que vamos ver implementada no IFESDOC: ingestao, processamento, indexacao, ranking e apresentacao dos resultados.
 
-- Usuario comum: busca e visualizacao.
-- Administrador: gestao e operacao do sistema.
-- Separacao de permissoes.
-- Protecao das rotas administrativas.
+Transicao:
 
-## Slide 6 - Ingestao De Documentos
+> Agora vamos entrar na parte central da apresentacao: como essa ideia foi implementada tecnicamente e quais diferenciais foram construidos no sistema.
 
-Explicar como documentos entram na base.
+## Pessoa 2 - Tecnologias, Arquitetura E Diferenciais
 
-Fala sugerida:
+Tempo total: 5min00s.
 
-> Na ingestao, o administrador pode enviar um documento individual ou varios arquivos em lote. O sistema valida o arquivo, registra falhas quando houver problema e armazena os dados necessarios para que o documento seja processado e encontrado posteriormente.
+### Slide 4 - Pilares Estrategicos
 
-Pontos principais:
+Tempo: 2:30 a 3:10.
 
-- Upload individual.
-- Upload em lote.
-- Validacao de arquivos.
-- Registro de documentos invalidos.
-- Armazenamento de metadados.
+Fala:
 
-## Slide 7 - Pipeline De Indexacao
+> O IFESDOC foi pensado com tres pilares principais. O primeiro e ser API-first, ou seja, o backend foi estruturado para expor funcionalidades de forma clara para diferentes clientes, como a interface web e futuramente outras integracoes.
 
-Explicar o processamento interno depois do upload.
+> O segundo pilar e a containerizacao. Usamos Docker Compose para deixar o ambiente mais reprodutivel, com backend, banco, frontend e worker. O terceiro pilar e a modularidade. O sistema foi feito para receber novos parsers, novos tipos de busca e novas estrategias sem quebrar o restante da aplicacao.
 
-Fala sugerida:
+### Slide 5 - Tecnologias Utilizadas
 
-> Depois da validacao, o texto passa por pre-processamento. O sistema normaliza os termos, remove ruidos, identifica palavras relevantes e grava essas informacoes no indice invertido. Esse indice permite localizar documentos rapidamente durante a busca.
+Tempo: 3:10 a 4:00.
 
-Pontos principais:
+Fala:
 
-- Extracao de texto.
-- Normalizacao.
-- Tokenizacao.
-- Remocao de termos irrelevantes.
-- Atualizacao incremental do indice.
+> No backend, usamos Python com FastAPI. Isso nos deu uma API performatica, documentacao automatica via Swagger e validacao com Pydantic. O acesso ao banco foi feito com SQLAlchemy, mantendo a comunicacao com o banco organizada e testavel.
 
-## Slide 8 - Busca De Documentos
+> No frontend, usamos React com TypeScript e Vite para criar uma interface responsiva e mais segura em relacao a tipos. No banco, usamos PostgreSQL, que alem de armazenar metadados tambem oferece recursos nativos de busca textual.
 
-Explicar como o usuario encontra documentos.
+> Em seguranca, o sistema usa autenticacao via JWT e controle por perfil. Em qualidade, usamos Pytest para testes automatizados e SonarQube como apoio para observar code smells, complexidade e qualidade do codigo.
 
-Fala sugerida:
+### Slide 6 - Arquitetura Do Sistema
 
-> Na busca, o usuario informa termos e pode aplicar filtros por categoria, tipo de documento, autor e periodo. O sistema calcula a relevancia dos documentos encontrados e permite ordenacao dinamica por relevancia, data ou titulo.
+Tempo: 4:00 a 4:45.
 
-Pontos principais:
+Fala:
 
-- Busca por termos.
-- Filtros por metadados.
-- Ordenacao dinamica.
-- Ranking de relevancia.
-- Historico de consultas.
+> A arquitetura foi separada em camadas para evitar que regra de negocio fique misturada diretamente nas rotas. As rotas HTTP ficam na camada de API. A orquestracao dos casos de uso fica em services. A comunicacao com o banco fica em repositories. As entidades principais ficam em domain.
 
-## Slide 9 - Apresentacao Avancada Dos Resultados
+> Tambem usamos patterns importantes. O Strategy Pattern permite alternar estrategias de busca e ranking, como frequencia, BM25, busca PostgreSQL FTS e busca hibrida. O Adapter Pattern isola bibliotecas externas, como o parser de PDF. Se trocarmos a biblioteca de extracao de texto, mudamos o adapter sem afetar o nucleo do sistema.
 
-Explicar os recursos visuais da tela de resultados.
+### Slide 7 - Roadmap Do Projeto
 
-Fala sugerida:
+Tempo: 4:45 a 5:10.
 
-> A tela de resultados nao mostra apenas uma lista simples. Ela destaca os termos buscados, exibe trechos relevantes, mostra percentual de relevancia, permite previa rapida, abertura do documento e exportacao dos resultados em CSV ou PDF.
+Fala:
 
-Pontos principais:
+> O desenvolvimento seguiu uma evolucao incremental. Primeiro levantamos requisitos e definimos a interface. Depois criamos a base do sistema e a gestao documental. Em seguida, evoluimos o motor de busca, indexacao, metricas, qualidade, integracao e melhorias finais.
 
-- Destaque dos termos buscados.
-- Trechos relevantes.
-- Barra ou percentual de relevancia.
-- Previa rapida do documento.
-- Exportacao CSV/PDF.
+> Esse roadmap mostra que o sistema nao nasceu apenas como uma tela de upload, mas como uma solucao progressiva de recuperacao e gestao documental.
 
-## Slide 10 - Versionamento De Documentos
+### Slide 8 - O Motor De Busca
 
-Explicar o controle de versoes.
+Tempo: 5:10 a 6:05.
 
-Fala sugerida:
+Fala:
 
-> O IFESDOC tambem controla versoes de documentos. Isso e importante porque um mesmo documento pode ser atualizado ao longo do tempo. O usuario pode selecionar a versao que deseja visualizar, e o administrador pode registrar novas versoes ou restaurar versoes anteriores.
+> O motor de busca e um dos pontos mais importantes do IFESDOC. Em vez de depender apenas de uma busca simples por texto, implementamos diferentes estrategias. O PostgreSQL Full-Text Search usa um indice invertido do proprio banco, baseado em `tsvector` e indice GIN. Isso permite buscar rapidamente dentro do conteudo indexado.
 
-Pontos principais:
+> Para ranking, usamos criterios de relevancia textual. O sistema tambem possui estrategias como frequencia, TF-IDF e BM25. O BM25 e uma tecnica estatistica muito usada em mecanismos de busca porque considera frequencia dos termos, raridade e tamanho do documento.
 
-- Multiplas versoes para um mesmo documento.
-- Selecao de versao na visualizacao.
-- Registro de nova versao.
-- Restauracao de versoes.
-- Preservacao do historico documental.
+> Alem disso, usamos `ts_headline` para destacar termos encontrados nos trechos exibidos. Para o usuario final, isso aparece como highlight nos resultados. Para a parte tecnica, isso mostra que a busca nao retorna apenas documentos, mas tambem evidencias do motivo pelo qual eles foram encontrados.
 
-## Slide 11 - Metricas E Relatorios
+### Slide 9 - Fluxo De Processamento
 
-Explicar os recursos de monitoramento.
+Tempo: 6:05 a 6:45.
 
-Fala sugerida:
+Fala:
 
-> O sistema registra metricas de uso da busca, como quantidade de consultas, tempo medio de resposta, buscas sem resultado, termos mais pesquisados e documentos mais acessados. Esses dados ajudam a avaliar a qualidade da busca e o uso do sistema.
+> Este slide mostra o fluxo pratico. Primeiro vem a ingestao: o documento e recebido pela interface e validado por formato, tamanho, categoria e integridade. Depois vem a extracao e o processamento: o sistema extrai texto, organiza metadados e prepara o conteudo para indexacao.
 
-Pontos principais:
+> Por fim, ocorre a indexacao e a busca. O indice e atualizado e o documento fica disponivel para consultas. Quando o usuario busca, o sistema aplica ranking de relevancia para priorizar os documentos mais pertinentes.
 
-- Total de consultas.
-- Tempo medio de resposta.
-- Consultas sem resultado.
-- Termos frequentes.
-- Documentos mais acessados.
-- Exportacao de relatorios.
+### Slide 10 - Pipeline De Indexacao
 
-## Slide 12 - Auditoria E Seguranca
+Tempo: 6:45 a 7:10.
 
-Explicar os controles de seguranca.
+Fala:
 
-Fala sugerida:
+> No pipeline de indexacao, o texto bruto e transformado em dados pesquisaveis. O sistema normaliza o texto, remove acentos, reduz ruido, tokeniza as palavras e gera termos relevantes. Documentos validos sao indexados; documentos invalidos sao registrados separadamente para controle e auditoria.
 
-> A seguranca e baseada em autenticacao por token, controle de perfil e restricao de rotas administrativas. Tentativas de acesso negado sao registradas na auditoria, o que melhora a rastreabilidade das acoes e ajuda na administracao do sistema.
+> Alem disso, adicionamos OCR com Tesseract para PDFs escaneados. Quando a extracao comum nao encontra texto suficiente, o OCR transforma a imagem do PDF em texto pesquisavel, que passa a ser salvo e indexado.
 
-Pontos principais:
+### Slide 11 - Funcionalidades
 
-- Autenticacao por token JWT.
-- Perfis de usuario.
-- Rotas administrativas protegidas.
-- Registro de acoes.
-- Auditoria de tentativas negadas.
-- Segredos configurados por variaveis de ambiente.
+Tempo: 7:10 a 7:30.
 
-## Slide 13 - Arquitetura Tecnica
+Fala:
 
-Apresentar a estrutura tecnica do sistema.
+> Como produto, o sistema oferece metricas e relatorios, versionamento de documentos, auditoria e seguranca. Isso significa que alem de buscar documentos, o IFESDOC tambem acompanha uso, preserva historico, controla acesso por perfil e permite restaurar versoes anteriores.
 
-Fala sugerida:
+Transicao:
 
-> Tecnicamente, o IFESDOC usa frontend em React, backend em FastAPI, banco PostgreSQL e Docker Compose para execucao dos servicos. O backend e dividido em camadas, como API, servicos, repositorios, dominio, estrategias e pipeline.
+> Agora vamos sair da explicacao e mostrar o sistema funcionando na pratica.
 
-Pontos principais:
+## Pessoa 3 - Demonstracao, Problemas E Fechamento
 
-- Frontend: React.
-- Backend: FastAPI.
-- Banco de dados: PostgreSQL.
-- Containerizacao: Docker Compose.
-- Worker de notificacoes.
-- Arquitetura em camadas.
+Tempo total: 2min30s.
 
-## Slide 14 - Beneficios
+### Slide 12 - Performance De Busca E Demonstracao
 
-Resumir o valor entregue pelo sistema.
+Tempo: 7:30 a 9:15.
 
-Fala sugerida:
+Objetivo: usar o slide de performance como ponte para a demonstracao ao vivo.
 
-> Os principais beneficios sao: recuperacao mais rapida de documentos, melhor organizacao institucional, controle de versoes, historico de acoes, metricas para gestao e uma experiencia de busca mais clara para o usuario.
+Sequencia da demo:
 
-Pontos principais:
+1. Fazer login no sistema.
+2. Mostrar rapidamente o menu principal.
+3. Abrir a busca.
+4. Pesquisar um termo relevante.
+5. Mostrar resultados com snippet, highlight e relevancia.
+6. Abrir um documento.
+7. Mostrar metadados, versoes e texto extraido.
+8. Se possivel, mostrar painel de OCR ou status de indexacao.
+9. Mostrar rapidamente metricas ou comparador de estrategias.
 
-- Busca mais eficiente.
-- Organizacao documental.
-- Rastreabilidade.
-- Controle de versoes.
-- Apoio a decisao com metricas.
-- Melhor experiencia de uso.
+Fala durante a demo:
 
-## Slide 15 - Demonstracao Sugerida
+> Agora vamos demonstrar o IFESDOC em uso. Primeiro, entramos no sistema com um usuario autenticado. Isso mostra que o acesso nao e aberto sem controle: existem perfis e permissoes.
 
-Guiar uma demonstracao pratica do sistema.
+> Na busca, digitamos um termo relacionado aos documentos indexados. O sistema retorna resultados com titulo, tipo, categoria, trecho relevante e relevancia. O destaque nos termos ajuda o usuario a entender rapidamente por que aquele documento apareceu.
 
-Fala sugerida:
+> Ao abrir o documento, vemos os metadados, o conteudo extraido e as versoes. Esse ponto e importante porque documentos institucionais podem mudar ao longo do tempo, e o sistema preserva o historico.
 
-> Uma demonstracao ideal comeca pelo login, depois mostra o envio de um documento, a execucao de uma busca, a visualizacao dos resultados, a previa, a selecao de versoes, a avaliacao de relevancia e a consulta de metricas.
+> Tambem podemos acompanhar indexacao, metricas e, quando aplicavel, OCR. Isso mostra que o IFESDOC nao e apenas uma busca visual: ele registra processamento, qualidade e rastreabilidade.
 
-Sequencia sugerida:
+Plano de contingencia se a demo falhar:
 
-1. Fazer login como administrador.
-2. Enviar um documento pela tela de ingestao.
-3. Executar uma busca.
-4. Mostrar resultados com destaque e relevancia.
-5. Abrir previa do documento.
-6. Selecionar uma versao.
-7. Registrar uma avaliacao de relevancia.
-8. Abrir metricas e relatorios.
-9. Mostrar auditoria administrativa.
+> Caso o ambiente apresente instabilidade, vamos seguir com as capturas e explicar o fluxo: login, busca, resultados, abertura do documento, versoes, OCR e metricas.
 
-## Slide 16 - Conclusao
+### Slide 13 - Principais Problemas De Desenvolvimento
 
-Fechar a apresentacao retomando o objetivo do sistema.
+Tempo: 9:15 a 9:35.
 
-Fala sugerida:
+Fala:
 
-> Concluindo, o IFESDOC oferece uma base solida para gestao e busca documental. Ele melhora a eficiencia no acesso a informacao, aumenta a rastreabilidade, organiza o ciclo de vida dos documentos e pode evoluir futuramente com recursos como busca semantica, inteligencia artificial e integracoes externas.
+> Durante o desenvolvimento, os principais desafios foram integrar modulos interdependentes, manter o indice sincronizado com documentos e versoes, estabilizar o pipeline de ingestao e garantir desempenho no mecanismo de busca.
 
-Pontos principais:
+> Esses problemas foram importantes porque representam dificuldades reais de engenharia: consistencia, desempenho, evolucao incremental e manutencao.
 
-- Sistema centralizado.
-- Busca documental eficiente.
-- Controle e rastreabilidade.
-- Base preparada para evolucao.
-- Potencial para busca semantica e IA.
+### Slide 14 - Beneficios Do IFESDOC
 
-## Encerramento
+Tempo: 9:35 a 9:50.
 
-Fala final sugerida:
+Fala:
 
-> O IFESDOC nao e apenas um repositorio de arquivos. Ele e uma ferramenta para transformar documentos em informacao acessivel, pesquisavel e monitoravel, apoiando tanto usuarios finais quanto administradores na gestao documental.
+> Como resultado, o IFESDOC entrega tres beneficios principais: organizacao e recuperacao da informacao, controle com seguranca e rastreabilidade, e apoio a gestao por meio de metricas e relatorios.
+
+> Em termos simples, o sistema reduz tempo de procura, melhora o controle documental e oferece dados para tomada de decisao.
+
+### Slides 15 E 16 - Fechamento E Duvidas
+
+Tempo: 9:50 a 10:00.
+
+Fala:
+
+> Para concluir, o IFESDOC transforma documentos isolados em conhecimento acessivel. Ele combina fundamentos de recuperacao da informacao, boas praticas de engenharia de software e uma interface voltada para uso real.
+
+> Obrigado. Estamos a disposicao para perguntas.
+
+## Observacoes De Ensaio
+
+- Ensaiar com cronometro. O segundo apresentador tem a maior carga de conteudo.
+- Pessoa 1 deve evitar aprofundar nas tecnologias, porque isso fica para Pessoa 2.
+- Pessoa 2 deve ser objetiva: explicar o diferencial sem entrar em codigo.
+- Pessoa 3 deve deixar o sistema aberto antes da apresentacao.
+- Se a demo atrasar, cortar metricas/comparador e manter apenas busca, resultado e documento.
+- Se a demo falhar, usar o plano de contingencia e manter o tempo.
